@@ -1,4 +1,4 @@
-module github.com/alexflint/wifi-log
+module github.com/alexflint/wifi-logger
 
 go 1.17
 
