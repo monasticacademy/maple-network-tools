@@ -85,7 +85,8 @@ func main() {
 	args.Interval = 10 * time.Minute
 	arg.MustParse(&args)
 
-	creds, err := google.CredentialsFromJSON(ctx, googleCredentials) //, "https://www.googleapis.com/auth/logging")
+	// unpack google credentials
+	creds, err := google.CredentialsFromJSON(ctx, googleCredentials)
 	if err != nil {
 		log.Fatal("error parsing credentials: ", err)
 	}
@@ -101,7 +102,6 @@ func main() {
 	}
 	defer logClient.Close()
 
-	// Sets the name of the log to write to.
 	lg := logClient.Logger(args.LogName)
 
 	// open packet capture handle
