@@ -4,6 +4,10 @@ DOCKER := docker --context=nas
 binary:
 	CGO_ENABLED=0 go build
 
+usb:
+	CGO_ENABLED=0 go build
+	cp speed-logger /mnt/chromeos/removable/CHINCHILLA/
+
 image:
 	$(DOCKER) build . -t speed-logger
 

@@ -18,12 +18,13 @@ var googleCredentials []byte
 
 // logEntry is the data that send to cloud logging once per N seconds
 type logEntry struct {
-	Machine         string  // machine from which this test was peformed
-	Network         string  // the wifi or ethernet network from which this test was performed
-	ServiceProvider string  // the service provider for the uplink to the internet
-	Latency         int64   // ping time in milliseconds
-	Down            float64 // download speed in megabits per second
-	Up              float64 // upload speed in megabits per second
+	Machine  string  // machine from which this test was peformed (e.g. "chromebook-1")
+	Location string  // physical location from which this test was performed (e.g. "garuda")
+	Network  string  // the wifi or ethernet network from which this test was performed (e.g. "maple-wifi")
+	Carrier  string  // the carrier over which this test was performed (e.g. "vtel")
+	Latency  int64   // ping time in milliseconds
+	Down     float64 // download speed in megabits per second
+	Up       float64 // upload speed in megabits per second
 }
 
 func main() {
@@ -31,15 +32,16 @@ func main() {
 
 	// process command line arguments
 	var args struct {
-		Machine         string `arg:"required,env:SPEEDLOGGER_MACHINE"`
-		Network         string `arg:"required,env:SPEEDLOGGER_NETWORK"`
-		ServiceProvider string `arg:"required,env:SPEEDLOGGER_SERVICE_PROVIDER"`
-		LogName         string
-		Interval        time.Duration
-		Timeout         time.Duration `help:"timeout for speed test"`
+		Machine  string `arg:"required,env:SPEEDLOGGER_MACHINE"`
+		Location string `arg:"required,env:SPEEDLOGGER_LOCATION"`
+		Network  string `arg:"required,env:SPEEDLOGGER_NETWORK"`
+		Carrier  string `arg:"required,env:SPEEDLOGGER_CARRIER"`
+		LogName  string
+		Interval time.Duration
+		Timeout  time.Duration `help:"timeout for speed test"`
 	}
 	args.LogName = "internet-speed"
-	args.Interval = 10 * time.Minute
+	args.Interval = 30 * time.Minute
 	args.Timeout = 5 * time.Minute
 	arg.MustParse(&args)
 
@@ -50,8 +52,9 @@ func main() {
 	}
 
 	log.Println("machine:", args.Machine)
+	log.Println("location:", args.Location)
 	log.Println("netwowrk:", args.Network)
-	log.Println("service provider:", args.ServiceProvider)
+	log.Println("carrier:", args.Carrier)
 	log.Println("project:", creds.ProjectID)
 	log.Println("log interval:", args.Interval)
 
@@ -90,8 +93,9 @@ func main() {
 	for ; true; <-ticker.C {
 		var entry logEntry
 		entry.Machine = args.Machine
+		entry.Location = args.Location
 		entry.Network = args.Network
-		entry.ServiceProvider = args.ServiceProvider
+		entry.Carrier = args.Carrier
 
 		log.Println("running a speed test...")
 
