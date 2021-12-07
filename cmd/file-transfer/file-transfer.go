@@ -56,13 +56,25 @@ func sendMain(ctx context.Context, args *args) error {
 	}
 	defer conn.Close()
 
-	err = gob.NewEncoder(conn).Encode(uploadRequest{
+	var b bytes.Buffer
+	err = gob.NewEncoder(&b).Encode(uploadRequest{
 		Path:    filepath.Base(args.Send.Path),
 		Content: buf,
 		Mode:    st.Mode(),
 	})
 	if err != nil {
 		return fmt.Errorf("error gob-encoding upload request: %w", err)
+	}
+
+	n, err := b.WriteTo(conn)
+	if err != nil {
+		return fmt.Errorf("error writing payload to tcp connection: %w", err)
+	}
+	fmt.Printf("wrote %d bytes (of %d) using %v\n", n, b.Len(), conn.LocalAddr())
+
+	err = conn.Close()
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -76,7 +88,7 @@ func receiveMain(ctx context.Context, args *args) error {
 	}
 	defer l.Close()
 
-	fmt.Printf("Listening on %d...\n", args.Receive.Port)
+	fmt.Printf("listening on %d...\n", args.Receive.Port)
 	for {
 		// Listen for an incoming connection
 		conn, err := l.Accept()
@@ -85,26 +97,31 @@ func receiveMain(ctx context.Context, args *args) error {
 			continue
 		}
 
+		fmt.Println("accepted a connection from", conn.RemoteAddr())
+
 		// Handle connections in a new goroutine.
 		go handleRequest(ctx, conn)
 	}
 }
 
 func handleRequest(ctx context.Context, conn net.Conn) {
-	defer conn.Close()
+	defer func() {
+		err := conn.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}()
 
-	buf, err := ioutil.ReadAll(conn)
-	if err != nil {
-		fmt.Println("error reading from connection:", err)
-		return
-	}
+	fmt.Printf("reading from %v...\n", conn.RemoteAddr())
 
 	var req uploadRequest
-	err = gob.NewDecoder(bytes.NewReader(buf)).Decode(&req)
+	err := gob.NewDecoder(conn).Decode(&req)
 	if err != nil {
 		fmt.Println("error decoding request:", err)
 		return
 	}
+
+	fmt.Printf("received %s (%d bytes)\n", req.Path, len(req.Content))
 
 	err = ioutil.WriteFile(req.Path, req.Content, req.Mode)
 	if err != nil {
@@ -112,7 +129,7 @@ func handleRequest(ctx context.Context, conn net.Conn) {
 		return
 	}
 
-	fmt.Printf("received %s (%d bytes)\n", req.Path, len(req.Content))
+	fmt.Printf("wrote %s\n", req.Path)
 
 	// TODO: send a response
 }

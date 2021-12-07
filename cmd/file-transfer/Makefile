@@ -3,3 +3,4 @@ file-transfer: file-transfer.go
 
 upload: file-transfer
 	gsutil cp /tmp/file-transfer gs://alexflint-misc/file-transfer
+	du -b /tmp/file-transfer
