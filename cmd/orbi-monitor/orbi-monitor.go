@@ -20,10 +20,10 @@ var googleCredentials []byte
 
 // logEntry is the data that send to cloud logging once per N seconds
 type logEntry struct {
-	From   string
-	To     string
-	Bytes  int
-	Frames int
+	From    string
+	To      string
+	Bytes   int64
+	Packets int64
 }
 
 // link represents a from and to address
@@ -34,8 +34,8 @@ type link struct {
 
 // statistics represents the statistics we keep for each from/to address
 type statistics struct {
-	Frames int // number of wifi frames observed
-	Bytes  int // number of bytes in all observed wifi frames
+	Packets int64 // number of packets observed
+	Bytes   int64 // number of bytes in all observed wifi frames
 }
 
 func main() {
@@ -76,22 +76,50 @@ func main() {
 	}
 
 	lastUpload := time.Now()
+	statsBySource := make(map[string]*statistics)
 	// statsByLink := make(map[link]*statistics)
 
 	var packets, bytes int64
 	pkgsrc := gopacket.NewPacketSource(handle, layers.LayerTypeDot11)
 	for packet := range pkgsrc.Packets() {
-		lay := packet.Layer(layers.LayerTypeDot11)
+		// fmt.Println("packet:")
+		// for _, lay := range packet.Layers() {
+		// 	fmt.Println(lay.LayerType())
+		// }
+
+		lay := packet.Layer(layers.LayerTypeIPv4)
 		if lay == nil {
+			// fmt.Println("not ipv4")
 			continue
 		}
 
+		p, ok := lay.(*layers.IPv4)
+		if !ok {
+			// fmt.Println("not castable")
+			continue
+		}
+
+		// fmt.Println("got a packet")
+
 		packets += 1
-		bytes += int64(len(packet.Data()))
+		bytes += int64(len(p.Payload))
+
+		stats, found := statsBySource[p.SrcIP.String()]
+		if !found {
+			stats = new(statistics)
+			statsBySource[p.SrcIP.String()] = stats
+		}
+		stats.Bytes += int64(len(p.Payload))
+		stats.Packets += 1
 
 		now := time.Now()
 		if now.Sub(lastUpload) > args.Interval {
 			log.Printf("%10d bytes over %10d packets", packets, bytes)
+
+			for k, v := range statsBySource {
+				log.Printf("  %15v: %10d bytes over %10d packets", k, v.Bytes, v.Packets)
+			}
+
 			// for k, v := range statsByLink {
 			// lg.Log(logging.Entry{
 			// 	Payload: logEntry{
@@ -107,6 +135,9 @@ func main() {
 
 			// TODO: delete the entries one-by-one to reduce memory churn
 			// statsByLink = make(map[link]*statistics)
+			bytes = 0
+			packets = 0
+			statsBySource = make(map[string]*statistics)
 			lastUpload = now
 		}
 
