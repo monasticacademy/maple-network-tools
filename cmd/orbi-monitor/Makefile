@@ -1,13 +1,14 @@
+default: build/orbi-monitor
 
-# address where file-transfer utility is running on the orbi
-ORBI := 10.0.0.1:1234
+build/orbi-monitor: orbi-monitor.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -o build/orbi-monitor
+	du -b build/orbi-monitor
 
-orbi-monitor: orbi-monitor.go
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -o /tmp/orbi-monitor
+serve:
+	python3 -m http.server --directory ./build 8000
 
-deploy: orbi-monitor
-	file-transfer send /tmp/orbi-monitor $(ORBI)
-
-upload: orbi-monitor
-	gsutil cp /tmp/orbi-monitor gs://alexflint-misc/orbi-monitor
-	du -b /tmp/orbi-monitor
+# previously I would upload to google storage and download from orbi but
+# this is too slow on MAPLE network
+upload: build/orbi-monitor
+	gsutil cp build/orbi-monitor gs://alexflint-misc/orbi-monitor
+	du -b build/orbi-monitor

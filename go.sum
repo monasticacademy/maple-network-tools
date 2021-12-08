@@ -179,6 +179,8 @@ github.com/mdlayher/socket v0.0.0-20210307095302-262dc9984e00 h1:qEtkL8n1DAHpi5/
 github.com/mdlayher/socket v0.0.0-20210307095302-262dc9984e00/go.mod h1:GAFlyu4/XV68LkQKYzKhIo/WW7j3Zi0YRAz/BOoanUc=
 github.com/mdlayher/wifi v0.0.0-20200527114002-84f0b9457fdd h1:50p1vPNK43pzCVX10+5MmiOerbBzC1vR6+sLB3FZewE=
 github.com/mdlayher/wifi v0.0.0-20200527114002-84f0b9457fdd/go.mod h1:Evt/EIne46u9PtQbeTx2NTcqURpr5K4SvKtGmBuDPN8=
+github.com/mostlygeek/arp v0.0.0-20170424181311-541a2129847a h1:AfneHvfmYgUIcgdUrrDFklLdEzQAvG9AKRTe1x1mx/0=
+github.com/mostlygeek/arp v0.0.0-20170424181311-541a2129847a/go.mod h1:jZxafo9CAqaKFQE4zitrg5QNlA6CXUsjwXPlIppF3tk=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=

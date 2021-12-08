@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	_ "embed"
+	"fmt"
 	"log"
+	"net"
 	"time"
 
 	"cloud.google.com/go/logging"
@@ -14,6 +16,21 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 )
+
+// this is how we match 802.11 packet addresses to the ARP table
+func arpKey(hw net.HardwareAddr) string {
+	if len(hw) != 6 {
+		return "nil"
+	}
+	return fmt.Sprintf("%X:%X", hw[4], hw[5])
+}
+
+func dot11Key(hw net.HardwareAddr) string {
+	if len(hw) != 6 {
+		return "nil"
+	}
+	return fmt.Sprintf("%X:%X", hw[0], hw[1])
+}
 
 //go:embed service-account.json
 var googleCredentials []byte
@@ -68,6 +85,19 @@ func main() {
 	defer logClient.Close()
 
 	lg := logClient.Logger(args.LogName)
+	_ = lg
+
+	// open ARP table (TODO: should reload this periodically)
+	arpTable, err := loadARPTable()
+	if err != nil {
+		log.Fatal("error loading ARP table: ", err)
+	}
+	ipByMAC := make(map[string]net.IP)
+	for _, entry := range arpTable.entries {
+		ipByMAC[arpKey(entry.HardwareAddr)] = entry.IPAddr
+		log.Printf("  %20v %20v", entry.HardwareAddr, entry.IPAddr)
+	}
+	log.Printf("loaded %d MAC addresses from ARP table", len(ipByMAC))
 
 	// open packet capture handle
 	handle, err := pcapgo.NewEthernetHandle(args.Interface)
@@ -75,49 +105,27 @@ func main() {
 		log.Fatal("error creating ethernet handle: ", err)
 	}
 
-	lastUpload := time.Now()
 	statsBySource := make(map[string]*statistics)
 	// statsByLink := make(map[link]*statistics)
 
-	var packets, bytes int64
+	logTicker := time.NewTicker(args.Interval)
+	var lastDump time.Time
+
+	var packets, bytes, nonwifi int64
 	pkgsrc := gopacket.NewPacketSource(handle, layers.LayerTypeDot11)
-	for packet := range pkgsrc.Packets() {
-		// fmt.Println("packet:")
-		// for _, lay := range packet.Layers() {
-		// 	fmt.Println(lay.LayerType())
-		// }
 
-		lay := packet.Layer(layers.LayerTypeIPv4)
-		if lay == nil {
-			// fmt.Println("not ipv4")
-			continue
-		}
+outer:
+	for {
+		select {
+		case <-ctx.Done():
+			break outer
 
-		p, ok := lay.(*layers.IPv4)
-		if !ok {
-			// fmt.Println("not castable")
-			continue
-		}
-
-		// fmt.Println("got a packet")
-
-		packets += 1
-		bytes += int64(len(p.Payload))
-
-		stats, found := statsBySource[p.SrcIP.String()]
-		if !found {
-			stats = new(statistics)
-			statsBySource[p.SrcIP.String()] = stats
-		}
-		stats.Bytes += int64(len(p.Payload))
-		stats.Packets += 1
-
-		now := time.Now()
-		if now.Sub(lastUpload) > args.Interval {
-			log.Printf("%10d bytes over %10d packets", packets, bytes)
-
+		case <-logTicker.C:
+			log.Println()
+			log.Printf("%10d bytes over %10d packets (plus %d non-wifi)", packets, bytes, nonwifi)
 			for k, v := range statsBySource {
-				log.Printf("  %15v: %10d bytes over %10d packets", k, v.Bytes, v.Packets)
+				//k = strings.ToUpper(k)
+				log.Printf("  %15v %10d bytes over %10d packets", k, v.Bytes, v.Packets)
 			}
 
 			// for k, v := range statsByLink {
@@ -138,11 +146,76 @@ func main() {
 			bytes = 0
 			packets = 0
 			statsBySource = make(map[string]*statistics)
-			lastUpload = now
+
+		case packet := <-pkgsrc.Packets():
+
+			var dump bool
+			if time.Since(lastDump) > 20*time.Second {
+				dump = true
+			}
+
+			if dump {
+				fmt.Println("packet:")
+				for _, lay := range packet.Layers() {
+					fmt.Println("  ", lay.LayerType())
+				}
+				lastDump = time.Now()
+			}
+
+			lay := packet.Layer(layers.LayerTypeDot11)
+			if lay == nil {
+				nonwifi += 1
+				break
+			}
+
+			p, ok := lay.(*layers.Dot11)
+			if !ok {
+				nonwifi += 1
+				break
+			}
+
+			// if dump {
+			// 	fmt.Printf("  %v -> %v (%v, %v)\n",
+			// 		p.Address1,
+			// 		p.Address2,
+			// 		p.Address3,
+			// 		p.Address4)
+			// 	fmt.Printf("  type: %v\n", p.Type)
+			// }
+
+			// for _, x := range packet.Layers() {
+			// 	if x.LayerType() == layers.LayerTypeDot11InformationElement {
+			// 		if xx, ok := x.(*layers.Dot11InformationElement); ok {
+			// 			fmt.Printf("information element: %25v (%d bytes)\n", xx.ID, len(xx.Info))
+			// 		}
+			// 	}
+			// }
+
+			macs := []net.HardwareAddr{p.Address1, p.Address2, p.Address3, p.Address4}
+			for _, mac := range macs {
+				if len(mac) != 6 {
+					continue
+				}
+
+				var ip net.IP
+				var found bool
+				if ip, found = ipByMAC[dot11Key(mac)]; !found {
+					continue
+				}
+				//log.Printf("known hardware address found at position %d (%v)", i, ip)
+
+				stats, found := statsBySource[ip.String()]
+				if !found {
+					stats = new(statistics)
+					statsBySource[ip.String()] = stats
+				}
+				stats.Bytes += int64(len(p.Payload))
+				stats.Packets += 1
+			}
+
+			packets += 1
+			bytes += int64(len(p.Payload))
+
 		}
-
 	}
-
-	_ = ctx
-	_ = lg
 }
