@@ -132,73 +132,20 @@ func main() {
 	}
 
 	// get the stream
-	stream, err := bqClient.AppendRows(ctx)
+	bqStream, err := bqClient.AppendRows(ctx)
 	if err != nil {
 		log.Fatal("AppendRows: ", err)
 	}
 
-	row := Traffic{
-		Begin:     "foo",
-		Duration:  3,
-		IPAddress: "10.0.0.0",
-		Bytes:     4,
-		Packets:   5,
-	}
-
-	bs, err := proto.MarshalOptions{}.Marshal(&row)
-	if err != nil {
-		log.Fatal("protobuf.Marshal: ", err)
-	}
+	// initialize options for protobuf marshalling
+	var protoMarshal proto.MarshalOptions
 
 	// eep protobuf is crazy
-	descriptor, err := adapt.NormalizeDescriptor(row.ProtoReflect().Descriptor())
+	var traffic Traffic
+	trafficDescriptor, err := adapt.NormalizeDescriptor(traffic.ProtoReflect().Descriptor())
 	if err != nil {
 		log.Fatal("NormalizeDescriptor: ", err)
 	}
-
-	// append the rows
-	err = stream.Send(&storagepb.AppendRowsRequest{
-		WriteStream: resp.Name,
-		TraceId:     "orbi-monitor", // identifies this client
-		Rows: &storagepb.AppendRowsRequest_ProtoRows{
-			ProtoRows: &storagepb.AppendRowsRequest_ProtoData{
-				// protocol buffer schema
-				WriterSchema: &storagepb.ProtoSchema{
-					ProtoDescriptor: descriptor,
-				},
-				// protobuf-encoded data
-				Rows: &storagepb.ProtoRows{
-					SerializedRows: [][]byte{
-						bs,
-					}, // serialized protocol buffer data
-				},
-			},
-		},
-	})
-	if err != nil {
-		log.Fatal("AppendRows.Send: ", err)
-	}
-
-	aresp, err := stream.Recv()
-	if err != nil {
-		log.Fatal("AppendRows.Recv: ", err)
-	}
-	pretty.Println("AppendRows response was: ", aresp.GetResponse())
-
-	fresp, err := bqClient.FinalizeWriteStream(ctx, &storagepb.FinalizeWriteStreamRequest{
-		Name: resp.Name,
-	})
-	if err != nil {
-		log.Fatal("FinalizeWriteStream: ", err)
-	}
-
-	err = bqClient.Close()
-	if err != nil {
-		log.Fatal("BigQueryWriteClient.Close: ", err)
-	}
-
-	log.Printf("sent %d bytes and bigquery says it added %d rows", len(bs), fresp.RowCount)
-	return
 
 	// open ARP table (TODO: should reload this periodically)
 	arpTable, err := loadARPTable()
@@ -236,10 +183,60 @@ outer:
 		case <-logTicker.C:
 			log.Println()
 			log.Printf("%10d bytes over %10d packets (plus %d non-wifi)", packets, bytes, nonwifi)
+
+			now := time.Now()
+
+			var bqRows, bqBytes int
+			var rowData [][]byte
 			for k, v := range statsBySource {
-				//k = strings.ToUpper(k)
 				log.Printf("  %15v %10d bytes over %10d packets", k, v.Bytes, v.Packets)
+
+				buf, err := protoMarshal.Marshal(&Traffic{
+					Begin:     now.String(),
+					Duration:  args.Interval.Milliseconds(),
+					IPAddress: k,
+					Bytes:     v.Bytes,
+					Packets:   v.Packets,
+				})
+				if err != nil {
+					log.Fatal("protobuf.Marshal: ", err)
+				}
+
+				bqRows += 1
+				bqBytes += len(buf)
+				rowData = append(rowData, buf)
 			}
+
+			// send data to bigquery
+
+			// append the rows
+			err = bqStream.Send(&storagepb.AppendRowsRequest{
+				WriteStream: resp.Name,
+				TraceId:     "orbi-monitor", // identifies this client
+				Rows: &storagepb.AppendRowsRequest_ProtoRows{
+					ProtoRows: &storagepb.AppendRowsRequest_ProtoData{
+						// protocol buffer schema
+						WriterSchema: &storagepb.ProtoSchema{
+							ProtoDescriptor: trafficDescriptor,
+						},
+						// protocol buffer data
+						Rows: &storagepb.ProtoRows{
+							SerializedRows: rowData, // serialized protocol buffer data
+						},
+					},
+				},
+			})
+			if err != nil {
+				log.Fatal("AppendRows.Send: ", err)
+			}
+
+			resp, err := bqStream.Recv()
+			if err != nil {
+				log.Fatal("AppendRows.Recv: ", err)
+			}
+			pretty.Println("AppendRows response was: ", resp.GetResponse())
+
+			log.Printf("sent %d rows (%d bytes) to bigquery", bqRows, bqBytes)
 
 			// for k, v := range statsByLink {
 			// lg.Log(logging.Entry{
