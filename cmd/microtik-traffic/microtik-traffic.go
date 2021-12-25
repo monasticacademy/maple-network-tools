@@ -77,8 +77,8 @@ func main() {
 	args.LogName = "microtik-traffic"
 	args.Dataset = "maple"
 	args.Table = "router_usage"
-	args.Interval = 10 * time.Minute
-	args.Router = "router.lan"
+	args.Interval = 10 * time.Second
+	args.Router = "router.lan:22"
 	args.User = "traffic-monitor"
 	arg.MustParse(&args)
 
@@ -136,7 +136,7 @@ func main() {
 
 	// get descriptor for our protobuf representing a bigquery row
 	var usage Usage
-	trafficDescriptor, err := adapt.NormalizeDescriptor(usage.ProtoReflect().Descriptor())
+	descriptor, err := adapt.NormalizeDescriptor(usage.ProtoReflect().Descriptor())
 	if err != nil {
 		log.Fatal("NormalizeDescriptor: ", err)
 	}
@@ -320,8 +320,7 @@ func main() {
 
 		// serialize the usage data
 		now := time.Now()
-		var bqRows, bqBytes int
-		var rowData [][]byte
+		var rows [][]byte
 		for _, usage := range usageByHostname {
 			usage.Begin = now.String()
 			usage.Duration = args.Interval.Milliseconds()
@@ -331,15 +330,13 @@ func main() {
 				return fmt.Errorf("protobuf.Marshal: %w", err)
 			}
 
-			bqRows += 1
-			bqBytes += len(buf)
-			rowData = append(rowData, buf)
+			rows = append(rows, buf)
 		}
 
 		// get the stream for pushing data to bigquery
 		bqStream, err := bqClient.AppendRows(ctx)
 		if err != nil {
-			log.Fatal("AppendRows: ", err)
+			return fmt.Errorf("AppendRows: %w", err)
 		}
 
 		// push the data to bigquery
@@ -348,13 +345,11 @@ func main() {
 			TraceId:     streamingTraceID, // identifies this client
 			Rows: &storagepb.AppendRowsRequest_ProtoRows{
 				ProtoRows: &storagepb.AppendRowsRequest_ProtoData{
-					// protocol buffer schema
 					WriterSchema: &storagepb.ProtoSchema{
-						ProtoDescriptor: trafficDescriptor,
+						ProtoDescriptor: descriptor,
 					},
-					// protocol buffer data
 					Rows: &storagepb.ProtoRows{
-						SerializedRows: rowData, // serialized protocol buffer data
+						SerializedRows: rows, // serialized protocol buffer data
 					},
 				},
 			},
@@ -372,7 +367,7 @@ func main() {
 		// this can help to diagnose errors
 		//pretty.Println("AppendRows response was: ", resp.GetResponse())
 
-		log.Printf("sent %d rows (%d bytes) to bigquery", bqRows, bqBytes)
+		log.Printf("sent %d rows to bigquery", len(rows))
 		return nil
 	}
 
