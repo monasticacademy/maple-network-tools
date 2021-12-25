@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"log"
 	"strconv"
@@ -44,9 +45,9 @@ func main() {
 	arg.MustParse(&args)
 
 	// parse the embeded public key for our router
-	pubkey, err := ssh.ParsePublicKey(microtikServerKey)
+	pubkey, _, _, _, err := ssh.ParseAuthorizedKey(microtikServerKey)
 	if err != nil {
-		log.Fatal("error parsing server SSH key")
+		log.Fatal("error parsing server SSH key: ", err)
 	}
 
 	// open an ssh connection to the router
