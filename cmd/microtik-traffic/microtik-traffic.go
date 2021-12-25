@@ -25,6 +25,15 @@ type Traffic struct {
 	Bytes   int
 }
 
+// get the last number in an IP address
+func lastPart(ip string) string {
+	if n := strings.LastIndex(ip, "."); n >= 0 {
+		return ip[n+1:]
+	}
+	return ip
+}
+
+// checks whether token starts with the given prefix and returns the remainder of the string
 func hasPrefix(token, key string) (value string, ok bool) {
 	if strings.HasPrefix(token, key) {
 		return strings.TrimPrefix(token, key), true
@@ -55,8 +64,7 @@ func main() {
 		User:            args.User,
 		Auth:            []ssh.AuthMethod{ssh.Password(args.Pass)},
 		HostKeyCallback: ssh.FixedHostKey(pubkey),
-		//HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout: 3 * time.Second,
+		Timeout:         3 * time.Second,
 	})
 	if err != nil {
 		log.Fatal("error dialing ssh on router: ", err)
@@ -96,17 +104,30 @@ func main() {
 		}
 	}
 
+	// create a session to take the traffic snapshot
+	snapshotSession, err := sshClient.NewSession()
+	if err != nil {
+		log.Fatal("error opening SSH session: ", err)
+	}
+	defer snapshotSession.Close()
+
+	// fetch the traffic table
+	err = snapshotSession.Run("/ip accounting snapshot take")
+	if err != nil {
+		log.Fatal("error taking traffic snapshot: ", err)
+	}
+
 	// create a session to fetch the traffic table
 	trafficSession, err := sshClient.NewSession()
 	if err != nil {
 		log.Fatal("error opening SSH session: ", err)
 	}
-	defer dhcpSession.Close()
+	defer trafficSession.Close()
 
 	// fetch the traffic table
 	trafficBuf, err := trafficSession.CombinedOutput("/ip accounting snapshot print terse")
 	if err != nil {
-		log.Fatal("error running traffic command: ", err)
+		log.Fatal("error printing traffic snapshot: ", err)
 	}
 
 	// parse the traffic table
@@ -164,10 +185,10 @@ func main() {
 
 		hostname, ok := hostnameByIP[localIP]
 		if !ok {
-			hostname = fmt.Sprintf("%s (not in dhcp)", localIP)
+			hostname = "unknown." + lastPart(localIP)
 		}
 		if hostname == "" {
-			hostname = fmt.Sprintf("%s (missing hostname)", localIP)
+			hostname = "unnamed." + lastPart(localIP)
 		}
 
 		usage := usageByHostname[hostname]
