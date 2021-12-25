@@ -43,15 +43,6 @@ func dot11Key(hw net.HardwareAddr) string {
 	return fmt.Sprintf("%X:%X", hw[0], hw[1])
 }
 
-// trafficRow is a row in the bigquery table for traffic summaries
-type trafficRow struct {
-	Begin     time.Time // beginning of the time period when these packets were collected
-	Duration  int64     // length in milliseconds of period when these packets were collected
-	IPAddress string    // address of computer
-	Bytes     int64     // number of bytes observed
-	Packets   int64     // number of packets observed
-}
-
 // logEntry is the data that send to cloud logging once per N seconds
 type logEntry struct {
 	From    string

@@ -1,0 +1,15 @@
+syntax = "proto3";
+package tutorial;
+
+//import "google/protobuf/timestamp.proto";
+
+option go_package = ".;main";
+
+message Usage {
+    //google.protobuf.Timestamp Begin = 10;
+    string Begin = 10;
+    int64 Duration = 20;
+    string Host = 30;
+    int64 Bytes = 40;
+    int64 Packets = 50;
+}
