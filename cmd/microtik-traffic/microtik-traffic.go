@@ -77,7 +77,7 @@ func main() {
 	args.LogName = "microtik-traffic"
 	args.Dataset = "maple"
 	args.Table = "router_usage"
-	args.Interval = 10 * time.Second
+	args.Interval = 10 * time.Minute
 	args.Router = "router.lan:22"
 	args.User = "traffic-monitor"
 	arg.MustParse(&args)
@@ -329,7 +329,6 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("protobuf.Marshal: %w", err)
 			}
-
 			rows = append(rows, buf)
 		}
 
