@@ -207,8 +207,6 @@ outer:
 				rowData = append(rowData, buf)
 			}
 
-			// send data to bigquery
-
 			// append the rows
 			err = bqStream.Send(&storagepb.AppendRowsRequest{
 				WriteStream: resp.Name,

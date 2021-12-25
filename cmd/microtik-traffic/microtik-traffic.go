@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/alexflint/go-arg"
+	"golang.org/x/crypto/ssh"
 )
 
 type DHCPLease struct {
@@ -30,18 +31,50 @@ func hasPrefix(token, key string) (value string, ok bool) {
 	return "", false
 }
 
+//go:embed microtik.pub
+var microtikServerKey []byte
+
 func main() {
 	var args struct {
-		Traffic string `arg:"positional,required"`
-		DHCP    string `arg:"positional,required"`
+		Router   string `help:"Hostname or IP address of router"`
+		User     string `help:"SSH username for router"`
+		Pass     string `help:"SSH password for router"`
+		Interval time.Duration
 	}
 	arg.MustParse(&args)
 
-	dhcpBuf, err := ioutil.ReadFile(args.DHCP)
+	// parse the embeded public key for our router
+	pubkey, err := ssh.ParsePublicKey(microtikServerKey)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error parsing server SSH key")
 	}
 
+	// open an ssh connection to the router
+	sshClient, err := ssh.Dial("tcp", args.Router, &ssh.ClientConfig{
+		User:            args.User,
+		Auth:            []ssh.AuthMethod{ssh.Password(args.Pass)},
+		HostKeyCallback: ssh.FixedHostKey(pubkey),
+		//HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout: 3 * time.Second,
+	})
+	if err != nil {
+		log.Fatal("error dialing ssh on router: ", err)
+	}
+
+	// create a session to fetch the dhcp lease table
+	dhcpSession, err := sshClient.NewSession()
+	if err != nil {
+		log.Fatal("error opening SSH session: ", err)
+	}
+	defer dhcpSession.Close()
+
+	// fetch the DHCP lease table
+	dhcpBuf, err := dhcpSession.CombinedOutput("/ip dhcp-server lease print terse")
+	if err != nil {
+		log.Fatal("error running DHCP command: ", err)
+	}
+
+	// parse the dhcp lease table
 	var leases []DHCPLease
 	for _, line := range strings.Split(string(dhcpBuf), "\n") {
 		var item DHCPLease
@@ -62,11 +95,20 @@ func main() {
 		}
 	}
 
-	trafficBuf, err := ioutil.ReadFile(args.Traffic)
+	// create a session to fetch the traffic table
+	trafficSession, err := sshClient.NewSession()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error opening SSH session: ", err)
+	}
+	defer dhcpSession.Close()
+
+	// fetch the traffic table
+	trafficBuf, err := trafficSession.CombinedOutput("/ip accounting snapshot print terse")
+	if err != nil {
+		log.Fatal("error running traffic command: ", err)
 	}
 
+	// parse the traffic table
 	var traffic []Traffic
 	for _, line := range strings.Split(string(trafficBuf), "\n") {
 		var item Traffic
@@ -96,7 +138,7 @@ func main() {
 		}
 	}
 
-	// match them up
+	// calculate usage per hostname
 	hostnameByIP := make(map[string]string)
 	for _, lease := range leases {
 		hostnameByIP[lease.IP] = lease.Hostname
@@ -107,6 +149,7 @@ func main() {
 		Packets  int
 		Bytes    int
 	}
+
 	usageByHostname := make(map[string]*Usage)
 	for _, row := range traffic {
 		var localIP string
@@ -135,6 +178,7 @@ func main() {
 		usage.Packets += row.Packets
 	}
 
+	// print usage info
 	for _, usage := range usageByHostname {
 		fmt.Printf("%40s %10d bytes %10d packets\n", usage.Hostname, usage.Bytes, usage.Packets)
 	}
