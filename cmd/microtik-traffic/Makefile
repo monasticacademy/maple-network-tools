@@ -10,9 +10,13 @@ microtik-traffic: *.go
 image: microtik-traffic
 	$(DOCKER) build . -t microtik-traffic
 
-start:
+restart:
 	-$(DOCKER) rm -f microtik-traffic
-	$(DOCKER) run -d --name=microtik-traffic -e PASS=$(MICROTIK_PASSWORD) microtik-traffic
+	$(DOCKER) run \
+		-d \
+		--name=microtik-traffic \
+		-e PASS=$(MICROTIK_PASSWORD) \
+		microtik-traffic
 
 stop:
 	$(DOCKER) kill microtik-traffic
