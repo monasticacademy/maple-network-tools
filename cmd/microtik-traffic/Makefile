@@ -1,31 +1,32 @@
 
 DOCKER := docker --context=nas
 
-# TODO: switch to docker secrets instead of this
-MICROTIK_PASSWORD := $(shell cat secrets/microtik-password)
-
 microtik-traffic: *.go
 	CGO_ENABLED=0 go build
 
 image: microtik-traffic
 	$(DOCKER) build . -t microtik-traffic
 
-restart:
-	-$(DOCKER) rm -f microtik-traffic
-	$(DOCKER) run \
-		-d \
-		--name=microtik-traffic \
-		-e PASS=$(MICROTIK_PASSWORD) \
+create:
+	$(DOCKER) service create \
+		--name microtik-traffic \
+		--env-file secrets/secrets \
 		microtik-traffic
 
-stop:
-	$(DOCKER) kill microtik-traffic
+destroy:
+	$(DOCKER) service rm microtik-traffic
+
+inspect:
+	$(DOCKER) service inspect --format pretty microtik-traffic
+
+deploy:
+	$(DOCKER) service update --force microtik-traffic
+
+logs:
+	$(DOCKER) service logs -f microtik-traffic
 
 logtail:
-	$(DOCKER) logs --tail 20 microtik-traffic
-
-logfollow:
-	$(DOCKER) logs -f microtik-traffic
+	$(DOCKER) service logs --tail 20 microtik-traffic
 
 gc:
 	$(DOCKER) system prune

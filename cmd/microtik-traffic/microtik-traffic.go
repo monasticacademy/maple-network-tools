@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -78,7 +79,7 @@ func main() {
 	args.Dataset = "maple"
 	args.Table = "router_usage"
 	args.Interval = 10 * time.Minute
-	args.Router = "router.lan:22"
+	args.Router = "microtik.maple.cml.me:22"
 	args.User = "traffic-monitor"
 	arg.MustParse(&args)
 
@@ -94,10 +95,13 @@ func main() {
 		log.Fatal("error parsing credentials: ", err)
 	}
 
+	log.Println("new 123")
 	log.Println("project:", creds.ProjectID)
 	log.Println("dataset:", args.Dataset)
 	log.Println("table:", args.Table)
 	log.Println("log interval:", args.Interval)
+	log.Println("password:", len(args.Pass))
+	log.Println(os.Environ())
 
 	// create the logger
 	logClient, err := logging.NewClient(ctx,
@@ -141,17 +145,20 @@ func main() {
 		log.Fatal("NormalizeDescriptor: ", err)
 	}
 
-	// clear the microtik snapshot table so that we don't get a spike at the start
-	// open an ssh connection to the router
-	log.Println("clearing the router snapshot table")
-	sshClient, err := ssh.Dial("tcp", args.Router, &ssh.ClientConfig{
+	// options for sshing to the router
+	sshConfig := ssh.ClientConfig{
 		User:            args.User,
 		Auth:            []ssh.AuthMethod{ssh.Password(args.Pass)},
 		HostKeyCallback: ssh.FixedHostKey(pubkey),
 		Timeout:         3 * time.Second,
-	})
+	}
+
+	// clear the microtik snapshot table so that we don't get a spike at the start
+	// open an ssh connection to the router
+	log.Println("clearing the router snapshot table")
+	sshClient, err := ssh.Dial("tcp", args.Router, &sshConfig)
 	if err != nil {
-		log.Fatal("error dialing router for ssh: ", err)
+		log.Fatal("error sshing to router: ", err)
 	}
 
 	// create a session to run the command
@@ -171,14 +178,9 @@ func main() {
 	tick := func(ctx context.Context) error {
 		// open an ssh connection to the router
 		// do not re-use across ticks because it will time out
-		sshClient, err := ssh.Dial("tcp", args.Router, &ssh.ClientConfig{
-			User:            args.User,
-			Auth:            []ssh.AuthMethod{ssh.Password(args.Pass)},
-			HostKeyCallback: ssh.FixedHostKey(pubkey),
-			Timeout:         3 * time.Second,
-		})
+		sshClient, err := ssh.Dial("tcp", args.Router, &sshConfig)
 		if err != nil {
-			return fmt.Errorf("error dialing router for ssh: %w", err)
+			return fmt.Errorf("error sshing to router: %w", err)
 		}
 
 		// create a session to fetch the dhcp lease table
