@@ -7,7 +7,6 @@ import (
 	_ "embed"
 	"fmt"
 	"log"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -77,7 +76,7 @@ func main() {
 	}
 	args.LogName = "microtik-traffic"
 	args.Dataset = "maple"
-	args.Table = "router_usage"
+	args.Table = "bandwidth_usage"
 	args.Interval = 10 * time.Minute
 	args.Router = "microtik.maple.cml.me:22"
 	args.User = "traffic-monitor"
@@ -95,13 +94,11 @@ func main() {
 		log.Fatal("error parsing credentials: ", err)
 	}
 
-	log.Println("new 123")
 	log.Println("project:", creds.ProjectID)
 	log.Println("dataset:", args.Dataset)
 	log.Println("table:", args.Table)
 	log.Println("log interval:", args.Interval)
-	log.Println("password:", len(args.Pass))
-	log.Println(os.Environ())
+	log.Printf("password: <%d chars>", len(args.Pass))
 
 	// create the logger
 	logClient, err := logging.NewClient(ctx,
@@ -173,6 +170,7 @@ func main() {
 	if err != nil {
 		log.Fatal("error taking traffic snapshot: ", err)
 	}
+	beginSnapshot := time.Now()
 
 	// the following function executes every N minutes
 	tick := func(ctx context.Context) error {
@@ -274,9 +272,9 @@ func main() {
 		}
 
 		// calculate usage per hostname
-		hostnameByIP := make(map[string]string)
+		leaseByIP := make(map[string]DHCPLease)
 		for _, lease := range leases {
-			hostnameByIP[lease.IP] = lease.Hostname
+			leaseByIP[lease.IP] = lease
 		}
 
 		usageByHostname := make(map[string]*Usage)
@@ -290,7 +288,8 @@ func main() {
 				continue
 			}
 
-			hostname, ok := hostnameByIP[localIP]
+			lease, ok := leaseByIP[localIP]
+			hostname := lease.Hostname
 			if !ok {
 				hostname = "unknown." + lastPart(localIP)
 			}
@@ -300,7 +299,7 @@ func main() {
 
 			usage := usageByHostname[hostname]
 			if usage == nil {
-				usage = &Usage{Host: hostname}
+				usage = &Usage{Host: hostname, MAC: lease.MAC}
 				usageByHostname[hostname] = usage
 			}
 			usage.Bytes += int64(row.Bytes)
@@ -321,10 +320,9 @@ func main() {
 		}
 
 		// serialize the usage data
-		now := time.Now()
 		var rows [][]byte
 		for _, usage := range usageByHostname {
-			usage.Begin = now.String()
+			usage.Begin = beginSnapshot.UnixMicro()
 			usage.Duration = args.Interval.Milliseconds()
 
 			buf, err := protoMarshal.Marshal(usage)
@@ -333,6 +331,7 @@ func main() {
 			}
 			rows = append(rows, buf)
 		}
+		beginSnapshot = time.Now()
 
 		// get the stream for pushing data to bigquery
 		bqStream, err := bqClient.AppendRows(ctx)

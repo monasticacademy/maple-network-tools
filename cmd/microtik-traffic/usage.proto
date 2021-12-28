@@ -1,15 +1,13 @@
 syntax = "proto3";
 package tutorial;
 
-//import "google/protobuf/timestamp.proto";
-
 option go_package = ".;main";
 
 message Usage {
-    //google.protobuf.Timestamp Begin = 10;
-    string Begin = 10;
-    int64 Duration = 20;
+    int64 Begin = 10;     // this is a timestamp in bigquery and we send microseconds since epoch
+    int64 Duration = 20;  // measurement duration in milliseconds
     string Host = 30;
-    int64 Bytes = 40;
-    int64 Packets = 50;
+    string MAC = 40;
+    int64 Bytes = 50;
+    int64 Packets = 60;
 }
