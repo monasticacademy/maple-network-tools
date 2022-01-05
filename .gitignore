@@ -2,3 +2,4 @@ service-account.json
 /wifi-log
 build/
 id_rsa
+/.venv
