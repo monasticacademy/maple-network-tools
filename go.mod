@@ -14,6 +14,7 @@ require (
 require (
 	cloud.google.com/go v0.97.0 // indirect
 	cloud.google.com/go/bigquery v1.25.0 // indirect
+	github.com/alexflint/go-restructure v0.2.0 // indirect
 	github.com/alexflint/go-scalar v1.0.0 // indirect
 	github.com/census-instrumentation/opencensus-proto v0.2.1 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
@@ -34,6 +35,7 @@ require (
 	github.com/mdlayher/netlink v1.4.1 // indirect
 	github.com/mdlayher/socket v0.0.0-20210307095302-262dc9984e00 // indirect
 	github.com/mostlygeek/arp v0.0.0-20170424181311-541a2129847a // indirect
+	github.com/phin1x/go-ipp v1.6.0 // indirect
 	github.com/reiver/go-oi v1.0.0 // indirect
 	github.com/reiver/go-telnet v0.0.0-20180421082511-9ff0b2ab096e // indirect
 	github.com/rogpeppe/go-internal v1.6.1 // indirect
