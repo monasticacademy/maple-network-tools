@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"context"
+	_ "embed"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,20 +14,65 @@ import (
 	"github.com/alexflint/go-arg"
 	"github.com/kr/pretty"
 	"github.com/phin1x/go-ipp"
+	"golang.org/x/oauth2/google"
+	"google.golang.org/api/drive/v2"
+	"google.golang.org/api/option"
 )
 
+//go:embed secrets/service-account.json
+var googleCredentials []byte
+
 func Main() error {
+	ctx := context.Background()
+
 	var args struct {
-		URI            string `arg:"positional,required"`
-		PostscriptFile string `arg:"positional,required"`
+		Printer        string
+		Document       string
+		PostscriptFile string
 	}
 	arg.MustParse(&args)
+
+	// unpack google credentials
+	creds, err := google.CredentialsFromJSON(ctx,
+		googleCredentials,
+		"https://www.googleapis.com/auth/documents.readonly",
+		"https://www.googleapis.com/auth/drive.readonly")
+	if err != nil {
+		return fmt.Errorf("error parsing google credentials: %w", err)
+	}
+
+	// create the Google drive client
+	driveClient, err := drive.NewService(ctx, option.WithCredentials(creds))
+	if err != nil {
+		return fmt.Errorf("error creating drive client: %w", err)
+	}
+
+	// export the document as a zip arcive
+	export, err := driveClient.Files.Export(args.Document, "application/pdf").Download()
+	if err != nil {
+		return fmt.Errorf("error in file download api call: %w", err)
+	}
+	defer export.Body.Close()
+
+	pdf, err := ioutil.ReadAll(export.Body)
+	if err != nil {
+		return fmt.Errorf("error reading exported doc from request: %w", err)
+	}
+
+	// write the pdf to a file
+	fmt.Printf("got %d bytes\n", len(pdf))
+	err = ioutil.WriteFile("out.pdf", pdf, os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	os.Exit(0)
 
 	// define a ipp request
 	req := ipp.NewRequest(ipp.OperationPrintJob, 1)
 	req.OperationAttributes[ipp.AttributeCharset] = "utf-8"
 	req.OperationAttributes[ipp.AttributeNaturalLanguage] = "en"
-	req.OperationAttributes[ipp.AttributePrinterURI] = args.URI
+	req.OperationAttributes[ipp.AttributePrinterURI] = args.Printer
 	req.OperationAttributes[ipp.AttributeRequestingUserName] = "some-user"
 	req.OperationAttributes[ipp.AttributeDocumentFormat] = "application/octet-stream"
 
@@ -43,7 +90,7 @@ func Main() error {
 	payload = append(payload, postscript...)
 
 	// send ipp request to remote server via http
-	httpReq, err := http.NewRequest("POST", args.URI, bytes.NewReader(payload))
+	httpReq, err := http.NewRequest("POST", args.Printer, bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("error creating http request: %w", err)
 	}
