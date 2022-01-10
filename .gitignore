@@ -3,3 +3,5 @@ service-account.json
 build/
 id_rsa
 /.venv
+secrets/*
+!secrets/*.encrypted
