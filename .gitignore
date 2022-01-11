@@ -5,4 +5,4 @@ id_rsa
 /.venv
 secrets/*
 !secrets/*.encrypted
-.bin/*
+.bin
