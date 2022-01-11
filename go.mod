@@ -14,6 +14,7 @@ require (
 require (
 	cloud.google.com/go v0.97.0 // indirect
 	cloud.google.com/go/bigquery v1.25.0 // indirect
+	cloud.google.com/go/pubsub v1.17.1 // indirect
 	github.com/alexflint/go-restructure v0.2.0 // indirect
 	github.com/alexflint/go-scalar v1.0.0 // indirect
 	github.com/census-instrumentation/opencensus-proto v0.2.1 // indirect

@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
 
+	"cloud.google.com/go/pubsub"
 	"github.com/alexflint/go-arg"
 	"github.com/kr/pretty"
 	"github.com/phin1x/go-ipp"
@@ -19,16 +22,29 @@ import (
 	"google.golang.org/api/option"
 )
 
+// PrintRequest is the json message we recieve from the pubsub topic
+type PrintRequest struct {
+	Document string `json:"document"` // Document ID for the Google Doc
+}
+
 //go:embed secrets/service-account.json
 var googleCredentials []byte
+
+// worker contains things that are re-used across many print jobs
+type worker struct {
+	pubsub  *pubsub.Client
+	drive   *drive.Service
+	printer string // URI for the physical printer
+}
 
 func Main() error {
 	ctx := context.Background()
 
 	var args struct {
-		Printer        string
-		Document       string
-		PostscriptFile string
+		Subscription   string `help:"Pubsub queue to pull from"`
+		Printer        string `help:"HTTP URI for printer"`
+		Document       string `help:"Document ID for the Google Doc"`
+		PostscriptFile string `help:"Path to a postscript file"`
 	}
 	arg.MustParse(&args)
 
@@ -36,9 +52,18 @@ func Main() error {
 	creds, err := google.CredentialsFromJSON(ctx,
 		googleCredentials,
 		"https://www.googleapis.com/auth/documents.readonly",
-		"https://www.googleapis.com/auth/drive.readonly")
+		"https://www.googleapis.com/auth/drive.readonly",
+		"https://www.googleapis.com/auth/pubsub",
+	)
 	if err != nil {
 		return fmt.Errorf("error parsing google credentials: %w", err)
+	}
+
+	// create the Google pubsub client
+	pubsubClient, err := pubsub.NewClient(ctx, creds.ProjectID,
+		option.WithCredentials(creds))
+	if err != nil {
+		return fmt.Errorf("error creating pubsub client: %w", err)
 	}
 
 	// create the Google drive client
@@ -47,8 +72,54 @@ func Main() error {
 		return fmt.Errorf("error creating drive client: %w", err)
 	}
 
+	// create a worker
+	w := worker{
+		pubsub:  pubsubClient,
+		drive:   driveClient,
+		printer: args.Printer,
+	}
+
+	// listen to subscription
+	log.Println("listening for messages from pubsub...")
+	sub := pubsubClient.Subscription(args.Subscription)
+	err = sub.Receive(ctx, func(ctx context.Context, m *pubsub.Message) {
+		defer func() {
+			if ex := recover(); ex != nil {
+				log.Println("recovering from panic:", ex)
+			}
+		}()
+
+		if err := w.processMessage(ctx, m); err != nil {
+			log.Println("error processing message: ", err)
+		}
+
+		m.Ack()
+	})
+	if err != nil {
+		return fmt.Errorf("error receiving messages from pubsub: %w", err)
+	}
+	return nil
+}
+
+func (w *worker) processMessage(ctx context.Context, m *pubsub.Message) error {
+	log.Printf("processing a message from pubsub (%d bytes published %v)",
+		len(m.Data), m.PublishTime)
+
+	var job PrintRequest
+	err := json.NewDecoder(bytes.NewReader(m.Data)).Decode(&job)
+	if err != nil {
+		return fmt.Errorf("error decoding pubsub message: %w", err)
+	}
+
+	return w.processJob(ctx, &job)
+}
+
+func (w *worker) processJob(ctx context.Context, job *PrintRequest) error {
+	log.Println("processing job for google doc", job.Document)
+	return nil
+
 	// export the document as a zip arcive
-	export, err := driveClient.Files.Export(args.Document, "application/pdf").Download()
+	export, err := w.drive.Files.Export(job.Document, "application/pdf").Download()
 	if err != nil {
 		return fmt.Errorf("error in file download api call: %w", err)
 	}
@@ -72,7 +143,7 @@ func Main() error {
 	req := ipp.NewRequest(ipp.OperationPrintJob, 1)
 	req.OperationAttributes[ipp.AttributeCharset] = "utf-8"
 	req.OperationAttributes[ipp.AttributeNaturalLanguage] = "en"
-	req.OperationAttributes[ipp.AttributePrinterURI] = args.Printer
+	req.OperationAttributes[ipp.AttributePrinterURI] = w.printer
 	req.OperationAttributes[ipp.AttributeRequestingUserName] = "some-user"
 	req.OperationAttributes[ipp.AttributeDocumentFormat] = "application/octet-stream"
 
@@ -83,14 +154,14 @@ func Main() error {
 	}
 
 	// read the test page
-	postscript, err := ioutil.ReadFile(args.PostscriptFile)
+	postscript, err := ioutil.ReadFile("TODO")
 	if err != nil {
 		return fmt.Errorf("error reading postscript file: %w", err)
 	}
 	payload = append(payload, postscript...)
 
 	// send ipp request to remote server via http
-	httpReq, err := http.NewRequest("POST", args.Printer, bytes.NewReader(payload))
+	httpReq, err := http.NewRequest("POST", w.printer, bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("error creating http request: %w", err)
 	}
