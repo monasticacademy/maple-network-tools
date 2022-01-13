@@ -1,8 +1,10 @@
 DOCKER := docker --context=synology		# docker command prefix
 IMAGE := thankyou-letter-printer		# docker image
 SERVICE := thankyou-letter-printer		# docker swarm service name
-PRINTER := http://brother-letterhead.maple.cml.me
+PRINTER := http://brother-letterhead.maple.cml.me   # URI for the physical printer
+ENDPOINT := https://us-central1-thankyou-letters.cloudfunctions.net/print-google-doc # hook for the cloudfunction
 
+# ID of a Google doc used for testing
 TEST_DOCUMENT := 123
 
 default: .bin/thankyou-letter-printer
@@ -15,7 +17,7 @@ default: .bin/thankyou-letter-printer
 # Test operations
 
 publish-test:
-	curl https://us-central1-thankyou-letters.cloudfunctions.net/print-google-doc?document=$(TEST_DOCUMENT)
+	curl $(ENDPOINT)?document=$(TEST_DOCUMENT)
 
 # Docker operations
 
@@ -54,7 +56,9 @@ gc:
 # Secret encryption and decryption
 
 encrypt-secrets:
+	echo "Please enter the password from bitwarden under 'maple network tools'..."
 	winpty go run ../crypt/*.go --encrypt secrets/*.json
 
 decrypt-secrets:
+	echo "Please enter the password from bitwarden under 'maple network tools'..."
 	winpty go run ../crypt/*.go --decrypt secrets/*.encrypted
