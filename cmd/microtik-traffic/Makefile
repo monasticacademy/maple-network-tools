@@ -63,3 +63,13 @@ sshkey:
 
 # add the key to the new user account
 	ssh $(ROUTER) /user ssh-keys import public-key-file=key.pub user=microtik-traffic
+
+# Secret encryption and decryption
+
+encrypt-secrets:
+	echo "Please enter the password from bitwarden under 'maple network tools'..."
+	winpty go run ../crypt/*.go --encrypt secrets/*.json
+
+decrypt-secrets:
+	echo "Please enter the password from bitwarden under 'maple network tools'..."
+	winpty go run ../crypt/*.go --decrypt secrets/*.encrypted

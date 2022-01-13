@@ -59,7 +59,7 @@ func hasPrefix(token, key string) (value string, ok bool) {
 //go:embed microtik.pub
 var microtikServerKey []byte
 
-//go:embed gcloud-service-account.json
+//go:embed secrets/gcloud-service-account.json
 var googleCredentials []byte
 
 func main() {
