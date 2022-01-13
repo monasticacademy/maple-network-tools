@@ -44,12 +44,8 @@ func Main() error {
 	}
 	fmt.Println()
 
-	fmt.Printf("password: %q\n", password)
-
 	// derive a key
 	key := pbkdf2.Key(password, salt, 4096, 32, sha1.New)
-
-	fmt.Printf("key: %x\n", key)
 
 	// process paths
 	for _, path := range args.Encrypt {
