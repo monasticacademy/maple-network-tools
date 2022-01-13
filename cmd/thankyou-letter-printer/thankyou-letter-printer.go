@@ -11,7 +11,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
+	"time"
 
 	"cloud.google.com/go/pubsub"
 	"github.com/alexflint/go-arg"
@@ -41,10 +44,10 @@ func Main() error {
 	ctx := context.Background()
 
 	var args struct {
-		Subscription   string `help:"Pubsub queue to pull from"`
-		Printer        string `help:"HTTP URI for printer"`
-		Document       string `help:"Document ID for the Google Doc"`
-		PostscriptFile string `help:"Path to a postscript file"`
+		Subscription string `help:"Pubsub queue to pull from"`
+		Printer      string `help:"HTTP URI for printer"`
+		Document     string `help:"Document ID for the Google Doc"`
+		TestPDF      string `help:"Path to a pdf file"`
 	}
 	arg.MustParse(&args)
 
@@ -79,6 +82,14 @@ func Main() error {
 		printer: args.Printer,
 	}
 
+	if len(args.TestPDF) > 0 {
+		pdf, err := ioutil.ReadFile(args.TestPDF)
+		if err != nil {
+			return fmt.Errorf("error reading test pdf: %w", err)
+		}
+		return w.processPDF(ctx, pdf)
+	}
+
 	// listen to subscription
 	log.Println("listening for messages from pubsub...")
 	sub := pubsubClient.Subscription(args.Subscription)
@@ -102,8 +113,10 @@ func Main() error {
 }
 
 func (w *worker) processMessage(ctx context.Context, m *pubsub.Message) error {
-	log.Printf("processing a message from pubsub (%d bytes published %v)",
-		len(m.Data), m.PublishTime)
+	log.Printf("processing a message from pubsub published %v ago", time.Since(m.PublishTime))
+
+	log.Printf("message: %s", string(m.Data))
+	log.Printf("quoted: %q", string(m.Data))
 
 	var job PrintRequest
 	err := json.NewDecoder(bytes.NewReader(m.Data)).Decode(&job)
@@ -116,9 +129,8 @@ func (w *worker) processMessage(ctx context.Context, m *pubsub.Message) error {
 
 func (w *worker) processJob(ctx context.Context, job *PrintRequest) error {
 	log.Println("processing job for google doc", job.Document)
-	return nil
 
-	// export the document as a zip arcive
+	// export the document as a pdf
 	export, err := w.drive.Files.Export(job.Document, "application/pdf").Download()
 	if err != nil {
 		return fmt.Errorf("error in file download api call: %w", err)
@@ -130,14 +142,40 @@ func (w *worker) processJob(ctx context.Context, job *PrintRequest) error {
 		return fmt.Errorf("error reading exported doc from request: %w", err)
 	}
 
-	// write the pdf to a file
-	fmt.Printf("got %d bytes\n", len(pdf))
-	err = ioutil.WriteFile("out.pdf", pdf, os.ModePerm)
+	return w.processPDF(ctx, pdf)
+}
+
+func (w *worker) processPDF(ctx context.Context, pdf []byte) error {
+	// create a temporary directory
+	tempdir, err := os.MkdirTemp("", "")
 	if err != nil {
-		return err
+		return fmt.Errorf("error creating temporary directory for pdf: %w", err)
+	}
+	defer os.RemoveAll(tempdir)
+
+	tempPdf := filepath.Join(tempdir, "temp.pdf")
+	tempPs := filepath.Join(tempdir, "temp.ps")
+
+	// write the pdf to a file
+	err = ioutil.WriteFile(tempPdf, pdf, os.ModePerm)
+	if err != nil {
+		return fmt.Errorf("error writing pdf to temporary file; %w", err)
 	}
 
-	os.Exit(0)
+	// run pdf2ps (TODO: add context)
+	stdout, err := exec.Command("pdf2ps", tempPdf, tempPs).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error running pdf2s: %w\n%s", err, string(stdout))
+	}
+
+	// read the postscript file
+	postscript, err := ioutil.ReadFile(tempPs)
+	if err != nil {
+		return fmt.Errorf("error reading postscript file: %w", err)
+	}
+
+	log.Printf("converted a %d-byte PDF to a %d-byte Postscript file",
+		len(pdf), len(postscript))
 
 	// define a ipp request
 	req := ipp.NewRequest(ipp.OperationPrintJob, 1)
@@ -151,12 +189,6 @@ func (w *worker) processJob(ctx context.Context, job *PrintRequest) error {
 	payload, err := req.Encode()
 	if err != nil {
 		return fmt.Errorf("error encoding ipp request: %w", err)
-	}
-
-	// read the test page
-	postscript, err := ioutil.ReadFile("TODO")
-	if err != nil {
-		return fmt.Errorf("error reading postscript file: %w", err)
 	}
 	payload = append(payload, postscript...)
 
