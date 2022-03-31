@@ -25,7 +25,7 @@ image: .bin/thankyou-letter-printer
 	$(DOCKER) build . -t $(IMAGE)
 
 testpdf:
-	winpty $(DOCKER) run -it --rm $(IMAGE) \
+	$(DOCKER) run -it --rm $(IMAGE) \
 	./thankyou-letter-printer \
 		--testpdf testdata/testfile.pdf \
 		--printer $(PRINTER)
@@ -57,8 +57,8 @@ gc:
 
 encrypt-secrets:
 	echo "Please enter the password from bitwarden under 'maple network tools'..."
-	winpty go run ../crypt/*.go --encrypt secrets/*.json
+	go run ../crypt/*.go --encrypt secrets/*.json
 
 decrypt-secrets:
 	echo "Please enter the password from bitwarden under 'maple network tools'..."
-	winpty go run ../crypt/*.go --decrypt secrets/*.encrypted
+	go run ../crypt/*.go --decrypt secrets/*.encrypted

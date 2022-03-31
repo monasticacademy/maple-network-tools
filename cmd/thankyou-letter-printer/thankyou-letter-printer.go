@@ -46,10 +46,10 @@ func Main() error {
 	var args struct {
 		Subscription string `help:"Pubsub queue to pull from"`
 		Printer      string `help:"HTTP URI for printer"`
-		Document     string `help:"Document ID for the Google Doc"`
-		TestPDF      string `help:"Path to a pdf file"`
+		TestPDF      string `help:"Path to a pdf file to print"`
+		TestDocID    string `help:"ID of a Google doc to export and print"`
 	}
-	arg.MustParse(&args)
+	p := arg.MustParse(&args)
 
 	// unpack google credentials
 	creds, err := google.CredentialsFromJSON(ctx,
@@ -82,12 +82,24 @@ func Main() error {
 		printer: args.Printer,
 	}
 
+	// if testing with a PDF file then print the document and exit
 	if len(args.TestPDF) > 0 {
 		pdf, err := ioutil.ReadFile(args.TestPDF)
 		if err != nil {
 			return fmt.Errorf("error reading test pdf: %w", err)
 		}
 		return w.processPDF(ctx, pdf)
+	}
+
+	if len(args.Printer) == 0 {
+		p.Fail("missing --printer")
+	}
+
+	// if testing with a document ID then export the document and exit
+	if len(args.TestDocID) > 0 {
+		return w.processJob(ctx, &PrintRequest{
+			Document: args.TestDocID,
+		})
 	}
 
 	// listen to subscription
