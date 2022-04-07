@@ -1,5 +1,5 @@
 
-DOCKER := docker --context=nas
+DOCKER := docker --context=synology
 ROUTER := admin@microtik.maple.cml.me
 TABLE := maple.bandwidth_usage
 SCHEMA := begin:timestamp,duration:integer,host:string,mac:string,bytes:integer,packets:integer
