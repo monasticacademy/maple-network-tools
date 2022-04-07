@@ -45,7 +45,7 @@ func (a *app) runWebUI(ctx context.Context, port string) {
 	}
 }
 
-func f(w io.Writer, label, err string, rtt int64) {
+func writeLine(w io.Writer, label, err string, rtt int64) {
 	if err == "" {
 		fmt.Fprintf(w, "%-10s %10s (%v)\n", label, "OK", time.Microsecond*time.Duration(rtt))
 	} else {
@@ -60,7 +60,10 @@ func (a *app) handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	f(w, "modem", latest[0].GetModemError(), latest[0].GetModemLatency())
-	f(w, "router", latest[0].GetRouterError(), latest[0].GetRouterLatency())
-	f(w, "google", latest[0].GetGoogleError(), latest[0].GetGoogleLatency())
+	writeLine(w, "modem", latest[0].GetModemError(), latest[0].GetModemLatency())
+	writeLine(w, "router", latest[0].GetRouterError(), latest[0].GetRouterLatency())
+	writeLine(w, "google", latest[0].GetGoogleError(), latest[0].GetGoogleLatency())
+
+	ts := time.UnixMicro(latest[0].GetTimestamp())
+	fmt.Fprintf(w, "\nas of %v ago\n", time.Since(ts))
 }
