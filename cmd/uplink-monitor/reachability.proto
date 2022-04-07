@@ -1,0 +1,20 @@
+syntax = "proto3";
+package tutorial;
+
+option go_package = ".;main";
+
+message Reachability {
+    int64 Timestamp = 10;     // microseconds since epoch
+
+    bool RouterReachable = 100;
+    string RouterError = 110;
+    int64 RouterLatency = 120;  // round-trip time in microseconds
+
+    bool ModemReachable = 200;
+    string ModemError = 210;
+    int64 ModemLatency = 220;  // round-trip time in microseconds
+
+    bool GoogleReachable = 300;
+    string GoogleError = 310;
+    int64 GoogleLatency = 320;  // round-trip time in microseconds
+}
