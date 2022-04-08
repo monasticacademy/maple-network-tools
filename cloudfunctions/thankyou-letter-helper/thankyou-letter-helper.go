@@ -60,5 +60,5 @@ func PrintGoogleDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Fprintf(w, "submitted document %s to the pubsub topic", document)
+	fmt.Fprintf(w, "submitted document %s to the pubsub topic\n", document)
 }
