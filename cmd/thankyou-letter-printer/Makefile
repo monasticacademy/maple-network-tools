@@ -1,11 +1,17 @@
-DOCKER := docker --context=synology		# docker command prefix
+#DOCKER := docker --context=synology		# docker command prefix
+DOCKER := docker						# docker command prefix
 IMAGE := thankyou-letter-printer		# docker image
 SERVICE := thankyou-letter-printer		# docker swarm service name
-PRINTER := http://brother-letterhead.maple.cml.me   # URI for the physical printer
-ENDPOINT := https://us-central1-thankyou-letters.cloudfunctions.net/print-google-doc # hook for the cloudfunction
+PRINTER := none # http://brother-letterhead.maple.cml.me   # URI for the physical printer
+PROJECT := thankyou-letters
+TOPIC := print-queue
+SUBSCRIPTION := print-queue
+
+# hook for the cloudfunction
+ENDPOINT := https://us-central1-thankyou-letters.cloudfunctions.net/print-google-doc
 
 # ID of a Google doc used for testing
-TEST_DOCUMENT := 123
+TEST_DOCUMENT := 16jsBg1n4bOscEJLp5HPrCHDdjPU9ylUSP2mv6MpRYEI
 
 default: .bin/thankyou-letter-printer
 
@@ -16,8 +22,8 @@ default: .bin/thankyou-letter-printer
 
 # Test operations
 
-publish-test:
-	curl $(ENDPOINT)?document=$(TEST_DOCUMENT)
+publish-test-message:
+	curl $(strip $(ENDPOINT))?document=$(TEST_DOCUMENT)
 
 # Docker operations
 
@@ -52,6 +58,21 @@ logtail:
 
 gc:
 	$(DOCKER) system prune
+
+run:
+	# only for debugging
+	$(DOCKER) run -it --rm -e PRINTER=dir:/tmp -e SUBSCRIPTION=$(SUBSCRIPTION) $(IMAGE)
+
+# Pub/sub operations
+
+create-topic:
+	gcloud pubsub topics create print-queue \
+		--project $(PROJECT)
+
+create-subscription:
+	gcloud pubsub subscriptions create $(SUBSCRIPTION) \
+		--project $(PROJECT) \
+		--topic $(TOPIC)
 
 # Secret encryption and decryption
 

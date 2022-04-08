@@ -14,11 +14,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/pubsub"
 	"github.com/alexflint/go-arg"
-	"github.com/kr/pretty"
 	"github.com/phin1x/go-ipp"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v2"
@@ -44,8 +44,8 @@ func Main() error {
 	ctx := context.Background()
 
 	var args struct {
-		Subscription string `help:"Pubsub queue to pull from"`
-		Printer      string `help:"HTTP URI for printer"`
+		Subscription string `arg:"env:SUBSCRIPTION" help:"Pubsub queue to pull from"`
+		Printer      string `arg:"env:PRINTER" help:"HTTP URI for printer"`
 		TestPDF      string `help:"Path to a pdf file to print"`
 		TestDocID    string `help:"ID of a Google doc to export and print"`
 	}
@@ -61,6 +61,11 @@ func Main() error {
 	if err != nil {
 		return fmt.Errorf("error parsing google credentials: %w", err)
 	}
+
+	log.Println(os.Environ())
+	log.Println("project: ", creds.ProjectID)
+	log.Println("pubsub subscription: ", args.Subscription)
+	log.Println("printer: ", args.Printer)
 
 	// create the Google pubsub client
 	pubsubClient, err := pubsub.NewClient(ctx, creds.ProjectID,
@@ -126,9 +131,7 @@ func Main() error {
 
 func (w *worker) processMessage(ctx context.Context, m *pubsub.Message) error {
 	log.Printf("processing a message from pubsub published %v ago", time.Since(m.PublishTime))
-
 	log.Printf("message: %s", string(m.Data))
-	log.Printf("quoted: %q", string(m.Data))
 
 	var job PrintRequest
 	err := json.NewDecoder(bytes.NewReader(m.Data)).Decode(&job)
@@ -204,6 +207,19 @@ func (w *worker) processPDF(ctx context.Context, pdf []byte) error {
 	}
 	payload = append(payload, postscript...)
 
+	// if printer is set to a pathname then copy files to that dir. This is used for testing.
+	if strings.HasPrefix(w.printer, "dir:") {
+		dir := strings.TrimPrefix(w.printer, "dir:")
+		ts := time.Now().Local().Format(time.RFC3339)
+		path := filepath.Join(dir, ts+".ps")
+		err = ioutil.WriteFile(path, postscript, os.ModePerm)
+		if err != nil {
+			return fmt.Errorf("error writing to %s: %v", path, err)
+		}
+		log.Printf("output file to %s, will not send to printer", path)
+		return nil
+	}
+
 	// send ipp request to remote server via http
 	httpReq, err := http.NewRequest("POST", w.printer, bytes.NewReader(payload))
 	if err != nil {
@@ -243,16 +259,18 @@ func (w *worker) processPDF(ctx context.Context, pdf []byte) error {
 		return fmt.Errorf("error decoding ipp response: %w", err)
 	}
 
+	if err = resp.CheckForErrors(); err != nil {
+		return fmt.Errorf("printer responded with error: %v", err)
+	}
+
 	// print the response
-	fmt.Println("Submitted print job. Response was:")
-	pretty.Println(resp)
+	log.Printf("submitted print job, requestID=%d, status=%d", resp.RequestId, resp.StatusCode)
 	return nil
 }
 
 func main() {
 	err := Main()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 }
