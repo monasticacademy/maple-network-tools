@@ -62,10 +62,9 @@ func Main() error {
 		return fmt.Errorf("error parsing google credentials: %w", err)
 	}
 
-	log.Println(os.Environ())
-	log.Println("project: ", creds.ProjectID)
-	log.Println("pubsub subscription: ", args.Subscription)
-	log.Println("printer: ", args.Printer)
+	log.Println("project:", creds.ProjectID)
+	log.Println("pubsub subscription:", args.Subscription)
+	log.Println("printer:", args.Printer)
 
 	// create the Google pubsub client
 	pubsubClient, err := pubsub.NewClient(ctx, creds.ProjectID,
@@ -216,7 +215,7 @@ func (w *worker) processPDF(ctx context.Context, pdf []byte) error {
 		if err != nil {
 			return fmt.Errorf("error writing to %s: %v", path, err)
 		}
-		log.Printf("output file to %s, will not send to printer", path)
+		log.Printf("wrote file to %s, will not send to printer", path)
 		return nil
 	}
 

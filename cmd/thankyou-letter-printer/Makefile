@@ -1,5 +1,5 @@
-#DOCKER := docker --context=synology		# docker command prefix
-DOCKER := docker						# docker command prefix
+DOCKER := docker --context=synology		# docker command prefix
+#DOCKER := docker						# docker command prefix
 IMAGE := thankyou-letter-printer		# docker image
 SERVICE := thankyou-letter-printer		# docker swarm service name
 PRINTER := none # http://brother-letterhead.maple.cml.me   # URI for the physical printer
@@ -11,7 +11,8 @@ SUBSCRIPTION := print-queue
 ENDPOINT := https://us-central1-thankyou-letters.cloudfunctions.net/print-google-doc
 
 # ID of a Google doc used for testing
-TEST_DOCUMENT := 16jsBg1n4bOscEJLp5HPrCHDdjPU9ylUSP2mv6MpRYEI
+TEST_DOCUMENT := 1WSqBGHb-YJbtlx1qamLyuueU8A6vayXVprTQKtYBJ9k
+#in team drive: TEST_DOCUMENT := 16jsBg1n4bOscEJLp5HPrCHDdjPU9ylUSP2mv6MpRYEI
 
 default: .bin/thankyou-letter-printer
 
@@ -39,6 +40,8 @@ testpdf:
 create:
 	$(DOCKER) service create \
 		--name $(SERVICE) \
+		--env PRINTER=dir:/tmp \
+		--env SUBSCRIPTION=$(SUBSCRIPTION) \
 		$(IMAGE)
 
 destroy:
