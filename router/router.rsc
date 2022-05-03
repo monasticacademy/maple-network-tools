@@ -1,4 +1,4 @@
-# may/01/2022 10:30:06 by RouterOS 6.49.2
+# may/03/2022 09:38:09 by RouterOS 6.49.2
 # software id = V1CM-1UH3
 #
 # model = RB4011iGS+
@@ -24,9 +24,9 @@ add comment=defconf name=LAN
 /interface wireless security-profiles
 set [ find default=yes ] supplicant-identity=MikroTik
 /ip pool
-add name=dhcp ranges=192.168.88.10-192.168.88.254
+add name=default-dhcp ranges=192.168.88.10-192.168.88.254
 /ip dhcp-server
-add address-pool=dhcp disabled=no interface=bridge name=defconf
+add address-pool=default-dhcp disabled=no interface=bridge name=defconf
 /interface bridge port
 add bridge=bridge comment=defconf interface=ether2
 add bridge=bridge comment=defconf interface=ether3
@@ -48,7 +48,7 @@ set enabled=yes
 /ip accounting web-access
 set accessible-via-web=yes
 /ip address
-add address=192.168.88.1/24 comment=defconf interface=ether2 network=\
+add address=192.168.88.1/24 comment=defconf interface=bridge network=\
     192.168.88.0
 /ip dhcp-client
 add comment=defconf disabled=no interface=ether1
@@ -72,7 +72,8 @@ add address=192.168.88.131 client-id=1:78:45:58:ea:e9:26 mac-address=\
 add address=192.168.88.77 client-id=1:78:45:58:e8:f:39 mac-address=\
     78:45:58:E8:0F:39 server=defconf
 /ip dhcp-server network
-add address=192.168.88.0/24 comment=defconf gateway=192.168.88.1
+add address=192.168.88.0/24 comment=defconf dns-server=192.168.88.1 gateway=\
+    192.168.88.1
 /ip dns
 set allow-remote-requests=yes
 /ip dns static
