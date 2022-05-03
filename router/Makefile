@@ -16,3 +16,13 @@ push:
 	echo "not implemented"
 #	scp router.rsc microtik:
 #	ssh microtik /import file=router.rsc
+
+# Secret encryption and decryption
+
+encrypt-secrets:
+	echo "Please enter the password from bitwarden under 'maple network tools'..."
+	go run ../cmd/crypt/*.go --encrypt $(shell ls secrets/* | grep -v '\.encrypted')
+
+decrypt-secrets:
+	echo "Please enter the password from bitwarden under 'maple network tools'..."
+	go run ../cmd/crypt/*.go --decrypt secrets/*.encrypted
