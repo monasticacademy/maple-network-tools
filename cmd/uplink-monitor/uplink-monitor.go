@@ -27,7 +27,8 @@ const streamingTraceID = "uplink-monitor" // identified this client in bigquery 
 //go:embed secrets/service-account.json
 var googleCredentials []byte
 
-func pingHost(ctx context.Context, host string, success *bool, info *string, latency *int64) {
+func pingHost(ctx context.Context, host string, success *bool, info *string, latency *int64, wg *sync.WaitGroup) {
+	defer wg.Done()
 	t, err := pingImpl(ctx, host)
 	if err == nil {
 		*success = true
@@ -49,11 +50,26 @@ func pingImpl(ctx context.Context, host string) (time.Duration, error) {
 	}
 	pinger.SetPrivileged(true)
 	pinger.Count = 3
-	err = pinger.Run() // blocks until finished
-	if err != nil {
-		return 0, err
+
+	// it seems that pinger.Run() sometimes hangs forever so we
+	// need to respect timeouts from the context
+	ch := make(chan error)
+	go func() {
+		ch <- pinger.Run()
+	}()
+
+	select {
+	case <-ctx.Done():
+		pinger.Stop()
+		<-ch
+		return 0, ctx.Err()
+	case err = <-ch:
+		if err != nil {
+			return 0, err
+		}
 	}
 
+	// collect pinger statistics
 	stats := pinger.Statistics()
 	if stats.PacketsRecv == 0 {
 		return 0, err
@@ -99,23 +115,21 @@ func (a *app) tick(ctx context.Context) error {
 	timestamp := time.Now()
 	log.Println("tick")
 
-	var r Reachability
+	// set a timeout because the ping function below can hang forever
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// run the pings in parallel
 	var wg sync.WaitGroup
 	wg.Add(3)
-	go func() {
-		pingHost(ctx, "google.com", &r.GoogleReachable, &r.GoogleError, &r.GoogleLatency)
-		wg.Done()
-	}()
-	go func() {
-		pingHost(ctx, "microtik.maple.cml.me", &r.RouterReachable, &r.RouterError, &r.RouterLatency)
-		wg.Done()
-	}()
-	go func() {
-		pingHost(ctx, "ridgewave.maple.cml.me", &r.ModemReachable, &r.ModemError, &r.ModemLatency)
-		wg.Done()
-	}()
-	wg.Wait() // TODO: set a timeout on this
 
+	var r Reachability
+	go pingHost(ctx, "google.com", &r.GoogleReachable, &r.GoogleError, &r.GoogleLatency, &wg)
+	go pingHost(ctx, "microtik.maple.cml.me", &r.RouterReachable, &r.RouterError, &r.RouterLatency, &wg)
+	go pingHost(ctx, "ridgewave.maple.cml.me", &r.ModemReachable, &r.ModemError, &r.ModemLatency, &wg)
+	wg.Wait()
+
+	// push the result onto the in-memory ring buffer
 	a.push(&r)
 
 	// initialize options for protobuf marshalling
@@ -162,9 +176,6 @@ func (a *app) tick(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error in stream.Recv: %w", err)
 	}
-
-	// this can help to diagnose errors
-	//pretty.Println("AppendRows response was: ", resp.GetResponse())
 
 	log.Printf("sent %d rows to bigquery", len(serialized))
 	return nil
