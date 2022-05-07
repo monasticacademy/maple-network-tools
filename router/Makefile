@@ -4,6 +4,11 @@ pull:
 	ssh microtik /export file=router.rsc
 	scp microtik:router.rsc .
 
+# pull configuration from router to this repository
+pull-verbose:
+	ssh microtik /export verbose file=router_verbose.rsc
+	scp microtik:router_verbose.rsc .
+
 # Compare the live configuration of the router to router.rsc
 diff:
 	ssh microtik /export file=live.rsc
