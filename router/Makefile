@@ -1,18 +1,21 @@
 
-# pull configuration from router to this repository
+# pull configuration from router to this repository (and convert line endings!)
 pull:
 	ssh microtik /export file=router.rsc
-	scp microtik:router.rsc .
+	scp microtik:router.rsc /tmp/router_crlf.rsc
+	sed 's/\r$$//' < /tmp/router_crlf.rsc > router.rsc
 
-# pull configuration from router to this repository
+# pull configuration from router to this repository (and convert line endings!)
 pull-verbose:
 	ssh microtik /export verbose file=router_verbose.rsc
-	scp microtik:router_verbose.rsc .
+	scp microtik:router_verbose.rsc /tmp/router_verbose_crlf.rsc
+	sed 's/\r$$//' < /tmp/router_verbose_crlf.rsc > router_verbose.rsc
 
-# Compare the live configuration of the router to router.rsc
+# compare the live configuration of the router to router.rsc
 diff:
 	ssh microtik /export file=live.rsc
-	scp microtik:live.rsc /tmp/live.rsc
+	scp microtik:live.rsc /tmp/live_crlf.rsc
+	sed 's/\r$$//' < /tmp/live_crlf.rsc > /tmp/live.rsc
 	diff router.rsc /tmp/live.rsc
 
 # does not really work yet
