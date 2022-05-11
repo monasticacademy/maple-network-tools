@@ -1,4 +1,4 @@
-# may/07/2022 10:38:29 by RouterOS 6.49.2
+# may/11/2022 13:06:04 by RouterOS 6.49.2
 # software id = V1CM-1UH3
 #
 # model = RB4011iGS+
@@ -28,6 +28,8 @@ set [ find default=yes ] supplicant-identity=MikroTik
 add name=default-dhcp ranges=192.168.88.10-192.168.88.254
 /ip dhcp-server
 add address-pool=default-dhcp disabled=no interface=bridge name=defconf
+/system logging action
+add disk-file-name=packetlog name=packetlog target=disk
 /interface bridge port
 add bridge=bridge comment=defconf interface=ether2
 add bridge=bridge comment=defconf interface=ether3
@@ -123,6 +125,9 @@ add action=drop chain=forward comment=\
     "koshin 5-3-2022: drop all from VTEL not DSTNATed" connection-nat-state=\
     !dstnat connection-state=new in-interface-list=VTEL
 /ip firewall mangle
+add action=log chain=prerouting comment=\
+    "koshin 5-11-2022: log packets on the special address list" log-prefix=\
+    "received packet in prerouting" src-address-list=vtel_users
 add action=mark-connection chain=prerouting comment=\
     "koshin 5-3-2022: mark connections bound for vtel" connection-state=new \
     new-connection-mark=route_to_vtel src-address-list=vtel_users
@@ -139,6 +144,8 @@ add chain=dynamic-in comment="koshin 5-3-2022" distance=1 set-check-gateway=\
     ping
 /system clock
 set time-zone-name=America/New_York
+/system logging
+add action=packetlog topics=firewall
 /tool mac-server
 set allowed-interface-list=LAN
 /tool mac-server mac-winbox

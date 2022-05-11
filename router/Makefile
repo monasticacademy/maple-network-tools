@@ -15,12 +15,24 @@ diff:
 	scp microtik:live.rsc /tmp/live.rsc
 	diff router.rsc /tmp/live.rsc
 
-
 # does not really work yet
 push:
 	echo "not implemented"
 #	scp router.rsc microtik:
 #	ssh microtik /import file=router.rsc
+
+
+# Test packets
+
+# send a UDP packet from 192.168.88.5 to google
+sendpacket:
+	sudo sendip -p ipv4 -is 192.168.88.5 -p udp -us 19870 -ud 19871 google.com
+
+# print the contents of the packetlog
+packetlog:
+	scp microtik:packetlog.0.txt /tmp/packetlog
+	cat /tmp/packetlog
+	wc /tmp/packetlog
 
 # Secret encryption and decryption
 
