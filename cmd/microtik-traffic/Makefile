@@ -55,7 +55,7 @@ head:
 # SSH operations
 
 fetch-router-fingerprint:
-	ssh-keyscan $(ROUTER) > microtik.pub
+	ssh-keyscan microtik.maple.cml.me > microtik.pub
 
 ssh-key:
 	@# create a read-only user account for the monitor tool
