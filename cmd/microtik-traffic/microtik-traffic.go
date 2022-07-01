@@ -380,6 +380,8 @@ func main() {
 		return nil
 	}
 
+	log.Println("entering tick loop")
+
 	// grab traffic snapshots and send to bigquery every N minutes
 	ticker := time.NewTicker(args.Interval)
 
