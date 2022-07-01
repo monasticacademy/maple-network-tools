@@ -9,6 +9,9 @@ SCHEMA := begin:timestamp,duration:integer,host:string,mac:string,bytes:integer,
 microtik-traffic: *.go
 	CGO_ENABLED=0 go build
 
+dry-run:
+	env $(shell cat secrets/secrets | xargs) go run *.go --testssh
+
 # Docker operations
 
 image: microtik-traffic
@@ -49,27 +52,37 @@ update-table:
 head:
 	bq head $(TABLE)
 
-# RouterOS operations
+# SSH operations
 
-sshkey:
-# create a read-only user account for the monitor tool
+fetch-router-fingerprint:
+	ssh-keyscan $(ROUTER) > microtik.pub
+
+ssh-key:
+	@# create a read-only user account for the monitor tool
 	ssh $(ROUTER) /user add name=traffic-monitor group=read password=<password>
 
-# create a new key pair
+	@# create a new key pair
 	ssh-keygen -t rsa secrets/microtik-traffic.key
 
-# copy the public key to the router
+	@# copy the public key to the router
 	scp secrets/microtik-traffic.key.pub $(ROUTER):key.pub
 
-# add the key to the new user account
+	@# add the key to the new user account
 	ssh $(ROUTER) /user ssh-keys import public-key-file=key.pub user=microtik-traffic
+
+# RouterOS operations
+
+fetch-snapshot:
+	ssh $(ROUTER) /ip accounting snapshot take
+	ssh $(ROUTER) /ip accounting snapshot print terse > traffic.txt
+	ssh $(ROUTER) /ip dhcp-server lease print terse > dhcp.txt
 
 # Secret encryption and decryption
 
 encrypt-secrets:
 	echo "Please enter the password from bitwarden under 'maple network tools'..."
-	winpty go run ../crypt/*.go --encrypt secrets/*.json
+	go run ../crypt/*.go --encrypt $(shell ls secrets/* | grep -v encrypted$$)
 
 decrypt-secrets:
 	echo "Please enter the password from bitwarden under 'maple network tools'..."
-	winpty go run ../crypt/*.go --decrypt secrets/*.encrypted
+	go run ../crypt/*.go --decrypt secrets/*.encrypted

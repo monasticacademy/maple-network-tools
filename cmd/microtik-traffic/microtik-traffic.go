@@ -7,6 +7,7 @@ import (
 	_ "embed"
 	"fmt"
 	"log"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -59,7 +60,7 @@ func hasPrefix(token, key string) (value string, ok bool) {
 //go:embed microtik.pub
 var microtikServerKey []byte
 
-//go:embed secrets/gcloud-service-account.json
+//go:embed secrets/service-account.json
 var googleCredentials []byte
 
 func main() {
@@ -72,6 +73,7 @@ func main() {
 		Router   string `help:"Hostname or IP address of router"`
 		User     string `help:"SSH username for router"`
 		Pass     string `help:"SSH password for router" arg:"env:PASS"`
+		TestSSH  bool   `help:"Test SSH connectivity and exit"`
 		Interval time.Duration
 	}
 	args.LogName = "microtik-traffic"
@@ -98,6 +100,8 @@ func main() {
 	log.Println("dataset:", args.Dataset)
 	log.Println("table:", args.Table)
 	log.Println("log interval:", args.Interval)
+	log.Println("router:", args.Router)
+	log.Println("user:", args.User)
 	log.Printf("password: <%d chars>", len(args.Pass))
 
 	// create the logger
@@ -171,6 +175,11 @@ func main() {
 		log.Fatal("error taking traffic snapshot: ", err)
 	}
 	beginSnapshot := time.Now()
+
+	if args.TestSSH {
+		fmt.Println("ssh test successful")
+		os.Exit(0)
+	}
 
 	// the following function executes every N minutes
 	tick := func(ctx context.Context) error {
