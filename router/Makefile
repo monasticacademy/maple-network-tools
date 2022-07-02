@@ -37,6 +37,11 @@ packetlog:
 	cat /tmp/packetlog
 	wc /tmp/packetlog
 
+routelog:
+	scp microtik:routelog.0.txt /tmp/routelog
+	cat /tmp/routelog
+	wc /tmp/routelog
+
 # Secret encryption and decryption
 
 encrypt-secrets:

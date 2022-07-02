@@ -126,7 +126,7 @@ func (a *app) tick(ctx context.Context) error {
 	var r Reachability
 	go pingHost(ctx, "google.com", &r.GoogleReachable, &r.GoogleError, &r.GoogleLatency, &wg)
 	go pingHost(ctx, "microtik.maple.cml.me", &r.RouterReachable, &r.RouterError, &r.RouterLatency, &wg)
-	go pingHost(ctx, "ridgewave.maple.cml.me", &r.ModemReachable, &r.ModemError, &r.ModemLatency, &wg)
+	go pingHost(ctx, "192.168.1.1", &r.ModemReachable, &r.ModemError, &r.ModemLatency, &wg)
 	wg.Wait()
 
 	// push the result onto the in-memory ring buffer
