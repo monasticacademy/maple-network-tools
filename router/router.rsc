@@ -1,4 +1,4 @@
-# may/11/2022 13:06:04 by RouterOS 6.49.2
+# jul/06/2022 10:11:14 by RouterOS 6.49.2
 # software id = V1CM-1UH3
 #
 # model = RB4011iGS+
@@ -30,6 +30,7 @@ add name=default-dhcp ranges=192.168.88.10-192.168.88.254
 add address-pool=default-dhcp disabled=no interface=bridge name=defconf
 /system logging action
 add disk-file-name=packetlog name=packetlog target=disk
+add disk-file-name=routelog name=routelog target=disk
 /interface bridge port
 add bridge=bridge comment=defconf interface=ether2
 add bridge=bridge comment=defconf interface=ether3
@@ -56,7 +57,7 @@ add address=192.168.88.1/24 comment=defconf interface=bridge network=\
 /ip dhcp-client
 add comment=defconf default-route-distance=2 disabled=no interface=ether1
 add comment="koshin 5-3-2022" default-route-distance=10 disabled=no \
-    interface=ether10 use-peer-dns=no use-peer-ntp=no
+    interface=ether10
 /ip dhcp-server lease
 add address=192.168.88.250 client-id=1:90:9:d0:0:60:b7 mac-address=\
     90:09:D0:00:60:B7 server=defconf
@@ -82,7 +83,7 @@ add address=192.168.88.22 client-id=1:b4:22:0:50:a:7f mac-address=\
 add address=192.168.88.0/24 comment=defconf dns-server=192.168.88.1 gateway=\
     192.168.88.1
 /ip dns
-set allow-remote-requests=yes
+set allow-remote-requests=yes servers=1.1.1.1
 /ip dns static
 add address=192.168.88.1 comment=defconf name=router.lan
 add address=192.168.88.1 name=microtik.maple.cml.me
@@ -138,7 +139,7 @@ add action=masquerade chain=srcnat comment=\
     "koshin 5-3-2022: macsquerade for VTEL" ipsec-policy=out,none \
     out-interface-list=VTEL
 /ip route
-add distance=1 gateway=10.102.4.142 routing-mark=route_to_vtel
+add distance=1 gateway=10.202.0.220 routing-mark=route_to_vtel
 /routing filter
 add chain=dynamic-in comment="koshin 5-3-2022" distance=1 set-check-gateway=\
     ping
