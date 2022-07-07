@@ -1,0 +1,11 @@
+syntax = "proto3";
+package tutorial;
+
+option go_package = ".;main";
+
+message HealthCheck {
+    int64 Timestamp = 10;     // microseconds since epoch
+    string Operation = 20;
+    string Error = 30;
+    int64 Duration = 40;   // time taken to complete the test
+}
