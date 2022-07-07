@@ -1,6 +1,6 @@
 
 DOCKER := docker --context=synology
-EXTERNAL_PORT := 19870   # port to publish the container on
+EXTERNAL_PORT := 19871   # port to publish the container on
 INTERNAL_PORT := 8000    # port for the Go binary to listen on
 
 PROJECT := maple-network-health  # for the bigquery dataset
@@ -17,6 +17,9 @@ SCHEMA := timestamp:timestamp,operation:string,error:string,duration:integer
 
 image: .bin
 	$(DOCKER) build . -t health-monitor
+
+dry-run:
+	$(DOCKER) run -it --rm --env DRY_RUN=1 health-monitor
 
 create:
 	$(DOCKER) service create \

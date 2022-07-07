@@ -35,7 +35,7 @@ func resolveHost(ctx context.Context, host, nameserver string, out *HealthCheck,
 	msg.SetQuestion(dns.Fqdn("example.com"), dns.TypeA)
 
 	var client dns.Client
-	_, rtt, err := client.ExchangeContext(ctx, &msg, nameserver)
+	ans, rtt, err := client.ExchangeContext(ctx, &msg, nameserver)
 
 	out.Duration = rtt.Microseconds()
 	if err != nil {
@@ -92,6 +92,7 @@ type app struct {
 	bqClient    *storage.BigQueryWriteClient  // client for writing to bigquery
 	descriptor  *descriptorpb.DescriptorProto // the protobuf descriptor for bigquery
 	writeStream string                        // the name of the bigquery write stream
+	dryRun      bool
 }
 
 // push adds a record to the "recent" buffer, possibly dropping old entries
@@ -117,6 +118,13 @@ func (a *app) latest() [][]*HealthCheck {
 		out = append(out, r)
 	}
 	return out
+}
+
+func formatError(err string) string {
+	if err == "" {
+		return "OK"
+	}
+	return err
 }
 
 // tick gets executed every 1 minute. It pings the modem, router, and google.com.
@@ -150,13 +158,13 @@ func (a *app) tick(ctx context.Context) error {
 	checks = append(checks, &pingStarlink)
 
 	wg.Add(1)
-	resolveAtRouter := HealthCheck{Timestamp: now, Operation: "resolve example.cml using router"}
-	go resolveHost(ctx, "example.cml", "192.168.88.1:53", &resolveAtRouter, &wg)
+	resolveAtRouter := HealthCheck{Timestamp: now, Operation: "resolve example.com using router"}
+	go resolveHost(ctx, "example.com", "192.168.88.1:53", &resolveAtRouter, &wg)
 	checks = append(checks, &resolveAtRouter)
 
 	wg.Add(1)
-	resolveAtCloudflare := HealthCheck{Timestamp: now, Operation: "resolve example.cml using router"}
-	go resolveHost(ctx, "example.cml", "1.1.1.1:53", &resolveAtCloudflare, &wg)
+	resolveAtCloudflare := HealthCheck{Timestamp: now, Operation: "resolve example.com using 1.1.1.1"}
+	go resolveHost(ctx, "example.com", "1.1.1.1:53", &resolveAtCloudflare, &wg)
 	checks = append(checks, &resolveAtCloudflare)
 
 	wg.Wait()
@@ -178,14 +186,22 @@ func (a *app) tick(ctx context.Context) error {
 		serialized = append(serialized, buf)
 	}
 
+	if a.dryRun {
+		log.Printf("ran %d checks (dry-run):", len(checks))
+		for _, check := range checks {
+			log.Printf("%40s -> %v", check.Operation, formatError(check.Error))
+		}
+		return nil
+	}
+
 	// get the stream for pushing data to bigquery
-	bqStream, err := a.bqClient.AppendRows(ctx)
+	ch, err := a.bqClient.AppendRows(ctx)
 	if err != nil {
 		return fmt.Errorf("AppendRows: %w", err)
 	}
 
 	// push the data to bigquery
-	err = bqStream.Send(&storagepb.AppendRowsRequest{
+	err = ch.Send(&storagepb.AppendRowsRequest{
 		WriteStream: a.writeStream,
 		TraceId:     streamingTraceID, // identifies this client
 		Rows: &storagepb.AppendRowsRequest_ProtoRows{
@@ -204,7 +220,7 @@ func (a *app) tick(ctx context.Context) error {
 	}
 
 	// get the response
-	_, err = bqStream.Recv()
+	_, err = ch.Recv()
 	if err != nil {
 		return fmt.Errorf("error in stream.Recv: %w", err)
 	}
@@ -221,6 +237,7 @@ func main() {
 		Dataset  string `help:"Bigquery dataset name"`
 		Table    string `help:"Bigquery table name"`
 		Interval time.Duration
+		DryRun   bool `arg:"env:DRY_RUN"`
 	}
 	args.Port = ":8000"
 	args.Dataset = "network"
@@ -238,25 +255,32 @@ func main() {
 	log.Println("dataset:", args.Dataset)
 	log.Println("table:", args.Table)
 	log.Println("interval:", args.Interval)
+	log.Println("dry run:", args.DryRun)
 
 	// create the bigquery client for stream insertion
-	bqClient, err := storage.NewBigQueryWriteClient(ctx,
-		option.WithCredentialsJSON(googleCredentials))
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer bqClient.Close()
+	var bqClient *storage.BigQueryWriteClient
+	var streamName string
+	if !args.DryRun {
+		bqClient, err = storage.NewBigQueryWriteClient(ctx,
+			option.WithCredentialsJSON(googleCredentials))
+		if err != nil {
+			log.Fatal("error creating bigquery client: ", err)
+		}
+		defer bqClient.Close()
 
-	// create the bigquery write stream
-	parent := fmt.Sprintf("projects/%s/datasets/%s/tables/%s", creds.ProjectID, args.Dataset, args.Table)
-	resp, err := bqClient.CreateWriteStream(ctx, &storagepb.CreateWriteStreamRequest{
-		Parent: parent,
-		WriteStream: &storagepb.WriteStream{
-			Type: storagepb.WriteStream_COMMITTED,
-		},
-	})
-	if err != nil {
-		log.Fatal("error creating write stream: ", err)
+		// create the bigquery write stream
+		parent := fmt.Sprintf("projects/%s/datasets/%s/tables/%s", creds.ProjectID, args.Dataset, args.Table)
+		resp, err := bqClient.CreateWriteStream(ctx, &storagepb.CreateWriteStreamRequest{
+			Parent: parent,
+			WriteStream: &storagepb.WriteStream{
+				Type: storagepb.WriteStream_COMMITTED,
+			},
+		})
+		if err != nil {
+			log.Fatal("error creating write stream: ", err)
+		}
+
+		streamName = resp.Name
 	}
 
 	// get descriptor for our protobuf representing a bigquery row
@@ -269,7 +293,8 @@ func main() {
 	app := app{
 		bqClient:    bqClient,
 		descriptor:  descriptor,
-		writeStream: resp.Name,
+		writeStream: streamName,
+		dryRun:      args.DryRun,
 	}
 
 	// start the web UI

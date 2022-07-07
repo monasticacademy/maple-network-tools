@@ -24,11 +24,6 @@ func (a *app) runWebUI(ctx context.Context, port string) {
 	// create file server for static assets
 	fs := http.FileServer(http.FS(assets))
 
-	for _, path := range []string{"favicon.ico", "/favicon.ico", "static/favicon.ico", "/static/favicon.ico"} {
-		_, err := assets.Open(path)
-		fmt.Printf("%s: %v\n", path, err)
-	}
-
 	// set up the routes
 	http.HandleFunc("/favicon.ico", a.handleSpecialAsset)
 	http.HandleFunc("/favicon-16x16.png", a.handleSpecialAsset)
