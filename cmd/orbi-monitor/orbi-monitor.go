@@ -25,7 +25,7 @@ import (
 	storagepb "google.golang.org/genproto/googleapis/cloud/bigquery/storage/v1beta2"
 )
 
-//go:embed service-account.json
+//go:embed secrets/service-account.json
 var googleCredentials []byte
 
 // this is how we match 802.11 packet addresses to the ARP table
