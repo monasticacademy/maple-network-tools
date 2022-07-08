@@ -193,7 +193,7 @@ func (a *app) tick(ctx context.Context) error {
 		}
 	}
 
-	log.Printf("ran %d checks (%d errors)", len(checks))
+	log.Printf("ran %d checks (%d errors)", len(checks), errors)
 
 	if a.dryRun {
 		for _, check := range checks {
