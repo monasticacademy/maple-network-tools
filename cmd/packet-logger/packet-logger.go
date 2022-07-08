@@ -18,7 +18,7 @@ import (
 	"google.golang.org/api/option"
 )
 
-//go:embed service-account.json
+//go:embed secrets/service-account.json
 var googleCredentials []byte
 
 func listStations() {
