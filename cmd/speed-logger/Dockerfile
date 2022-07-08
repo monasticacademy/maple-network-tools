@@ -5,5 +5,5 @@ ENV SPEEDLOGGER_LOCATION=garuda
 ENV SPEEDLOGGER_NETWORK=ethernet
 ENV SPEEDLOGGER_SERVICE_PROVIDER=vtel
 RUN ls -l /app
-ADD speed-logger /app/
+ADD .bin /app/
 CMD /app/speed-logger

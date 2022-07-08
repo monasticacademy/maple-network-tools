@@ -13,7 +13,7 @@ import (
 	"google.golang.org/api/option"
 )
 
-//go:embed service-account.json
+//go:embed secrets/service-account.json
 var googleCredentials []byte
 
 // logEntry is the data that send to cloud logging once per N seconds
