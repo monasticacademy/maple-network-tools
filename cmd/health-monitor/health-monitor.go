@@ -35,7 +35,7 @@ func resolveHost(ctx context.Context, host, nameserver string, out *HealthCheck,
 	msg.SetQuestion(dns.Fqdn("example.com"), dns.TypeA)
 
 	var client dns.Client
-	ans, rtt, err := client.ExchangeContext(ctx, &msg, nameserver)
+	_, rtt, err := client.ExchangeContext(ctx, &msg, nameserver)
 
 	out.Duration = rtt.Microseconds()
 	if err != nil {
@@ -133,7 +133,9 @@ func (a *app) tick(ctx context.Context) error {
 	log.Println("tick")
 
 	// set a timeout because the ping function below can hang forever
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// do not re-use this context below when e.g. pushing to bigquery because
+	// that cause timeouts on operations that would have succeeded
+	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	now := time.Now().UnixMicro()
@@ -144,27 +146,27 @@ func (a *app) tick(ctx context.Context) error {
 
 	wg.Add(1)
 	pingGoogle := HealthCheck{Timestamp: now, Operation: "ping google"}
-	go pingHost(ctx, "google.com", &pingGoogle, &wg)
+	go pingHost(checkCtx, "google.com", &pingGoogle, &wg)
 	checks = append(checks, &pingGoogle)
 
 	wg.Add(1)
 	pingRouter := HealthCheck{Timestamp: now, Operation: "ping router"}
-	go pingHost(ctx, "192.168.88.1", &pingRouter, &wg)
+	go pingHost(checkCtx, "192.168.88.1", &pingRouter, &wg)
 	checks = append(checks, &pingRouter)
 
 	wg.Add(1)
 	pingStarlink := HealthCheck{Timestamp: now, Operation: "ping starlink"}
-	go pingHost(ctx, "192.168.1.1", &pingStarlink, &wg)
+	go pingHost(checkCtx, "192.168.1.1", &pingStarlink, &wg)
 	checks = append(checks, &pingStarlink)
 
 	wg.Add(1)
 	resolveAtRouter := HealthCheck{Timestamp: now, Operation: "resolve example.com using router"}
-	go resolveHost(ctx, "example.com", "192.168.88.1:53", &resolveAtRouter, &wg)
+	go resolveHost(checkCtx, "example.com", "192.168.88.1:53", &resolveAtRouter, &wg)
 	checks = append(checks, &resolveAtRouter)
 
 	wg.Add(1)
 	resolveAtCloudflare := HealthCheck{Timestamp: now, Operation: "resolve example.com using 1.1.1.1"}
-	go resolveHost(ctx, "example.com", "1.1.1.1:53", &resolveAtCloudflare, &wg)
+	go resolveHost(checkCtx, "example.com", "1.1.1.1:53", &resolveAtCloudflare, &wg)
 	checks = append(checks, &resolveAtCloudflare)
 
 	wg.Wait()
@@ -177,6 +179,7 @@ func (a *app) tick(ctx context.Context) error {
 
 	// serialize the usage data
 	var serialized [][]byte
+	var errors int
 	for _, row := range checks {
 		row.Timestamp = timestamp.UnixMicro()
 		buf, err := protoMarshal.Marshal(row)
@@ -184,10 +187,15 @@ func (a *app) tick(ctx context.Context) error {
 			return fmt.Errorf("protobuf.Marshal: %w", err)
 		}
 		serialized = append(serialized, buf)
+
+		if len(row.Error) > 0 {
+			errors += 1
+		}
 	}
 
+	log.Printf("ran %d checks (%d errors)", len(checks))
+
 	if a.dryRun {
-		log.Printf("ran %d checks (dry-run):", len(checks))
 		for _, check := range checks {
 			log.Printf("%40s -> %v", check.Operation, formatError(check.Error))
 		}
@@ -241,7 +249,7 @@ func main() {
 	}
 	args.Port = ":8000"
 	args.Dataset = "network"
-	args.Table = "HealthCheck"
+	args.Table = "health"
 	args.Interval = time.Minute
 	arg.MustParse(&args)
 
