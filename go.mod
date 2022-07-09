@@ -1,4 +1,4 @@
-module github.com/alexflint/maple-network-tools
+module github.com/monasticacademy/maple-network-tools
 
 go 1.17
 
