@@ -42,9 +42,9 @@ func (a *app) runWebUI(ctx context.Context, port string) {
 
 func writeLine(w io.Writer, label, err string, rtt int64) {
 	if err == "" {
-		fmt.Fprintf(w, "%-10s %10s (%v)\n", label, "OK", time.Microsecond*time.Duration(rtt))
+		fmt.Fprintf(w, "%-40s %10s (%v)\n", label, "OK", time.Microsecond*time.Duration(rtt))
 	} else {
-		fmt.Fprintf(w, "%-10s %10s (%v)\n", label, "FAIL", err)
+		fmt.Fprintf(w, "%-40s %10s (%v)\n", label, "FAIL", err)
 	}
 }
 
