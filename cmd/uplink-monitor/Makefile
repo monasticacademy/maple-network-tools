@@ -1,6 +1,6 @@
 
 DOCKER := docker --context=synology
-EXTERNAL_PORT := 19870   # port to publish the container on
+EXTERNAL_PORT := 19875   # port to publish the container on
 INTERNAL_PORT := 8000    # port for the Go binary to listen on
 
 PROJECT := maple-network-health  # for the bigquery dataset
