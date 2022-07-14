@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MAPLE Network Health</title>
+  <meta name="description" content="Health checks for MAPLE on-premise network">
+  <meta name="author" content="Monastic Academy">
+  <meta name="viewport" content="width=device-width, initial-scale=1"> <!-- Mobile -->
+  <link href="//fonts.googleapis.com/css?family=Raleway:400,300,600" rel="stylesheet" type="text/css">
+  <link rel="stylesheet" href="static/css/normalize.css">
+  <link rel="stylesheet" href="static/css/skeleton.css">
+  <link rel="stylesheet" href="static/css/styles.css">
+  <link rel="icon" type="image/png" href="static/images/favicon.ico">
+</head>
+<body>
+  <div class="container">
+    <table class="u-full-width">
+      <thead>
+        <tr>
+          <th>Health Check</th>
+          <th>Error</th>
+          <th>Duration</th>
+          <th>When</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Checks}}
+        <tr{{if .Error}} class="failure"{{end}}>
+          <td>{{.Operation}}</td>
+          <td>{{.Error}}</td>
+          <td>{{.Duration | seconds}}</td>
+          <td>{{.Timestamp | since}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

@@ -13,6 +13,9 @@ SCHEMA := timestamp:timestamp,operation:string,error:string,duration:integer
 .bin: *.go
 	CGO_ENABLED=0 go build -o .bin
 
+run:
+	DRY_RUN=1 go run *.go
+
 # Docker operations
 
 image: .bin
