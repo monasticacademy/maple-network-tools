@@ -2,7 +2,7 @@ DOCKER := docker --context=synology		# docker command prefix
 #DOCKER := docker						# docker command prefix
 IMAGE := print-demon		# docker image
 SERVICE := print-demon		# docker swarm service name
-PRINTER := none # http://brother-letterhead.maple.cml.me   # URI for the physical printer
+PRINTER := http://192.168.88.133   # URI for the physical printer
 PROJECT := thankyou-letters
 TOPIC := print-queue
 SUBSCRIPTION := print-queue
@@ -38,14 +38,14 @@ image: .bin/print-demon
 
 testpdf:
 	$(DOCKER) run -it --rm $(IMAGE) \
-	./print-demon \
+		./print-demon \
 		--testpdf testdata/testfile.pdf \
 		--printer $(PRINTER)
 
 create:
 	$(DOCKER) service create \
 		--name $(SERVICE) \
-		--env PRINTER=dir:/tmp \
+		--env PRINTER=$(PRINTER) \
 		--env SUBSCRIPTION=$(SUBSCRIPTION) \
 		$(IMAGE)
 
@@ -69,7 +69,12 @@ gc:
 
 run:
 	# only for debugging
-	$(DOCKER) run -it --rm -e PRINTER=dir:/tmp -e SUBSCRIPTION=$(SUBSCRIPTION) $(IMAGE)
+	$(DOCKER) run \
+		-it \
+		--rm \
+		-e PRINTER=dir:/tmp \
+		-e SUBSCRIPTION=$(SUBSCRIPTION) \
+		$(IMAGE)
 
 # Pub/sub operations
 
