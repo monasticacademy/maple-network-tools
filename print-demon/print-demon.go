@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -160,43 +159,20 @@ func (w *worker) processJob(ctx context.Context, job *PrintRequest) error {
 }
 
 func (w *worker) processPDF(ctx context.Context, pdf []byte) error {
-	// create a temporary directory
-	tempdir, err := os.MkdirTemp("", "")
+	document, err := pdfToPCL(ctx, pdf)
 	if err != nil {
-		return fmt.Errorf("error creating temporary directory for pdf: %w", err)
-	}
-	defer os.RemoveAll(tempdir)
-
-	tempPdf := filepath.Join(tempdir, "temp.pdf")
-	tempPs := filepath.Join(tempdir, "temp.ps")
-
-	// write the pdf to a file
-	err = ioutil.WriteFile(tempPdf, pdf, os.ModePerm)
-	if err != nil {
-		return fmt.Errorf("error writing pdf to temporary file; %w", err)
+		return err
 	}
 
-	// run pdf2ps (TODO: add context)
-	stdout, err := exec.Command("pdf2ps", tempPdf, tempPs).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("error running pdf2s: %w\n%s", err, string(stdout))
-	}
-
-	// read the postscript file
-	postscript, err := ioutil.ReadFile(tempPs)
-	if err != nil {
-		return fmt.Errorf("error reading postscript file: %w", err)
-	}
-
-	log.Printf("converted a %d-byte PDF to a %d-byte Postscript file",
-		len(pdf), len(postscript))
+	log.Printf("converted a %d-byte PDF to a %d-byte PCL file",
+		len(pdf), len(document))
 
 	// define a ipp request
 	req := ipp.NewRequest(ipp.OperationPrintJob, 1)
 	req.OperationAttributes[ipp.AttributeCharset] = "utf-8"
 	req.OperationAttributes[ipp.AttributeNaturalLanguage] = "en"
 	req.OperationAttributes[ipp.AttributePrinterURI] = w.printer
-	req.OperationAttributes[ipp.AttributeRequestingUserName] = "some-user"
+	req.OperationAttributes[ipp.AttributeRequestingUserName] = "print-demon"
 	req.OperationAttributes[ipp.AttributeDocumentFormat] = "application/octet-stream"
 
 	// encode request to bytes
@@ -204,14 +180,14 @@ func (w *worker) processPDF(ctx context.Context, pdf []byte) error {
 	if err != nil {
 		return fmt.Errorf("error encoding ipp request: %w", err)
 	}
-	payload = append(payload, postscript...)
+	payload = append(payload, document...)
 
 	// if printer is set to a pathname then copy files to that dir. This is used for testing.
 	if strings.HasPrefix(w.printer, "dir:") {
 		dir := strings.TrimPrefix(w.printer, "dir:")
 		ts := time.Now().Local().Format(time.RFC3339)
 		path := filepath.Join(dir, ts+".ps")
-		err = ioutil.WriteFile(path, postscript, os.ModePerm)
+		err = ioutil.WriteFile(path, document, os.ModePerm)
 		if err != nil {
 			return fmt.Errorf("error writing to %s: %v", path, err)
 		}

@@ -1,7 +1,7 @@
 DOCKER := docker --context=synology		# docker command prefix
 #DOCKER := docker						# docker command prefix
-IMAGE := thankyou-letter-printer		# docker image
-SERVICE := thankyou-letter-printer		# docker swarm service name
+IMAGE := print-demon		# docker image
+SERVICE := print-demon		# docker swarm service name
 PRINTER := none # http://brother-letterhead.maple.cml.me   # URI for the physical printer
 PROJECT := thankyou-letters
 TOPIC := print-queue
@@ -14,26 +14,31 @@ ENDPOINT := https://us-central1-thankyou-letters.cloudfunctions.net/print-google
 TEST_DOCUMENT := 1WSqBGHb-YJbtlx1qamLyuueU8A6vayXVprTQKtYBJ9k
 #in team drive: TEST_DOCUMENT := 16jsBg1n4bOscEJLp5HPrCHDdjPU9ylUSP2mv6MpRYEI
 
-default: .bin/thankyou-letter-printer
+default: .bin/print-demon
 
 # Compilation operations
 
-.bin/thankyou-letter-printer: *.go
-	CGO_ENABLED=0 GOOS=linux go build -o .bin/thankyou-letter-printer
+.bin/print-demon: *.go
+	CGO_ENABLED=0 GOOS=linux go build -o .bin/print-demon
 
 # Test operations
 
 publish-test-message:
 	curl $(strip $(ENDPOINT))?document=$(TEST_DOCUMENT)
 
+pdf-to-pcl:
+	gs -o testdata/thankyou.pcl \
+    -sDEVICE=pxlcolor \
+    -f testdata/thankyou.pdf
+
 # Docker operations
 
-image: .bin/thankyou-letter-printer
+image: .bin/print-demon
 	$(DOCKER) build . -t $(IMAGE)
 
 testpdf:
 	$(DOCKER) run -it --rm $(IMAGE) \
-	./thankyou-letter-printer \
+	./print-demon \
 		--testpdf testdata/testfile.pdf \
 		--printer $(PRINTER)
 
