@@ -1,0 +1,7 @@
+id: thankyou-letters
+name: thankyou-letters
+account: koshin@cml.me
+billing: enable
+apis:
+ - cloudfunctions
+ - secretmanager

@@ -18,7 +18,7 @@ func main() {
 	args.Address = ":19870"
 	arg.MustParse(&args)
 
-	http.HandleFunc("/print-google-doc", p.PrintGoogleDoc)
+	http.HandleFunc("/print-google-doc", p.HandleSlackEvent)
 
 	fmt.Println("listening on", args.Address)
 	err := http.ListenAndServe(args.Address, nil)
