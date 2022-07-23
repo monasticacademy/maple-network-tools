@@ -34,7 +34,7 @@ deploy:
 		--allow-unauthenticated \
 		--runtime=go116 \
 		--set-env-vars=TOPIC=$(TOPIC) \
-		--set-secrets=SLACK_TOKEN=slack-client-secret:latest,SLACK_SIGNING_SECRET=slack-signing-secret:latest
+		--set-secrets=SLACK_TOKEN=slack-token:latest,SLACK_SIGNING_SECRET=slack-signing-secret:latest
 
 open-runtime-logs:
 	firefox https://console.cloud.google.com/functions/details/$(REGION)/$(FUNCTION)?env=gen1&project=$(PROJECT)&tab=logs
@@ -49,6 +49,9 @@ create-service-account:
 	gcloud projects add-iam-policy-binding $(PROJECT) \
 		--member serviceAccount:$(SERVICE_ACCOUNT_EMAIL) \
 		--role roles/editor
+	gcloud projects add-iam-policy-binding $(PROJECT)
+		--member serviceAccount:$(SERVICE_ACCOUNT_EMAIL) \
+		--role roles/secretmanager.secretAccessor
 
 grant-appengine-access-to-secrets:
 	gcloud projects add-iam-policy-binding $(PROJECT)

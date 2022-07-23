@@ -1,8 +1,15 @@
 service-account.json
-/wifi-log
+
 build/
+.bin
+
 id_rsa
 /.venv
+
 **/secrets/*
 !**/secrets/*.encrypted
-.bin
+
+
+.terraform
+terraform.tfstate
+terraform.tfstate.backup

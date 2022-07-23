@@ -2,9 +2,9 @@
 package p
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -15,13 +15,13 @@ import (
 	"github.com/slack-go/slack/slackevents"
 )
 
+// max file size 9MB (pubsub max is 10MB)
+const maxFileSize = 10 * 1 << 20
+
 var (
 	pubsubClient *pubsub.Client
 	slackClient  *slack.Client
 )
-
-// note that this variable will be present in the cloud runtime:
-//  var projectID = os.Getenv("GOOGLE_CLOUD_PROJECT")
 
 var (
 	project = os.Getenv("GOOGLE_CLOUD_PROJECT") // dictated by Google Cloud
@@ -70,6 +70,8 @@ func HandleSlackEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println(string(body))
+
 	event, err := slackevents.ParseEvent(
 		json.RawMessage(body),
 		slackevents.OptionNoVerifyToken())
@@ -96,6 +98,9 @@ func HandleSlackEvent(w http.ResponseWriter, r *http.Request) {
 
 	if event.Type == slackevents.CallbackEvent {
 		innerEvent := event.InnerEvent
+
+		log.Printf("inner event type was %s (%T)", innerEvent.Type, innerEvent.Data)
+
 		switch ev := innerEvent.Data.(type) {
 		case *slackevents.AppMentionEvent:
 			log.Println("got an @mention for the app")
@@ -106,31 +111,55 @@ func HandleSlackEvent(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-		case *slackevents.MessageEvent:
-			for _, file := range ev.Files {
-				log.Printf("found a file with name %q, filetype %q, permalink %q, public permalink %q",
-					file.Name, file.Filetype, file.Permalink, file.PermalinkPublic)
+		case *slack.FileSharedEvent:
+			// ev.File.Permalink points to a HTML page with a link to download
+			// ev.File.PermalinkPublic points to the original file if the file was shared by URL
+			// ev.File.PrivateURL points to the file contents and requires an authorization header
+			// ev.File.PrivateURLPublic points to the file contents, requires an authorization header, and additionall adds heads to force a browser download
+			log.Printf("a file was shared (ID %s)", ev.FileID)
+
+			f, _, _, err := slackClient.GetFileInfoContext(ctx, ev.FileID, 1, 0)
+			if err != nil {
+				log.Printf("error retrieving file info for %s from slack: %v", ev.FileID, err)
+				w.WriteHeader(http.StatusFailedDependency)
+				return
 			}
+
+			json.NewEncoder(os.Stderr).Encode(f)
+
+			if f.Size > maxFileSize {
+				log.Printf("file size was too large: %d bytes (max is %d)", ev.File.Size, maxFileSize)
+				w.WriteHeader(http.StatusFailedDependency)
+				return
+			}
+
+			// create http request
+			var content bytes.Buffer
+			err = slackClient.GetFileContext(ctx, f.URLPrivate, &content)
+			if err != nil {
+				log.Println("error downloading a shared file:", err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			log.Printf("downloaded a file of size %d bytes", content.Len())
+
+			// push the file to pubsub
+			topic := pubsubClient.Topic(topic)
+			promise := topic.Publish(ctx, &pubsub.Message{
+				Data: content.Bytes(),
+			})
+
+			// do not block the request on the result of the promise
+			defer func() {
+				_, err = promise.Get(ctx)
+				if err != nil {
+					log.Printf("error pushing message to pubsub: %v", err)
+				}
+			}()
+
+			// report the result
+			log.Printf("pushed a file of %d bytes to pubsub", content.Len())
 		}
 	}
-
-	fmt.Fprintln(w, "done")
-	return
-
-	var buf []byte // TODO
-
-	topic := pubsubClient.Topic(topic)
-	promise := topic.Publish(ctx, &pubsub.Message{
-		Data: buf,
-	})
-
-	_, err = promise.Get(ctx)
-	if err != nil {
-		http.Error(w,
-			"error pushing message to pubsub: "+err.Error(),
-			http.StatusInternalServerError)
-		return
-	}
-
-	fmt.Fprintln(w, "submitted document to the pubsub topic\n")
 }
